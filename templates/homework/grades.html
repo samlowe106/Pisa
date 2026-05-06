@@ -1,0 +1,146 @@
+{% extends 'homework/base.html' %}
+
+{% block title %}Grades – Pisa{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>{% if user.is_staff %}All Grades{% else %}My Grades{% endif %}</h1>
+    <p class="meta">{% if user.is_staff %}View all student submissions and grades{% else %}View your submission history and results{% endif %}</p>
+</div>
+
+{% if user.is_staff %}
+    <!-- Instructor View -->
+    <div class="card">
+        <h2>Recent Submissions</h2>
+        {% if submissions %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Assignment</th>
+                    <th>Problem</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for submission in submissions %}
+                <tr>
+                    <td>{{ submission.user.get_full_name|default:submission.user.username }}</td>
+                    <td><a href="{% url 'homework:assignment_detail' slug=submission.problem.assignment.slug %}">{{ submission.problem.assignment.title }}</a></td>
+                    <td><a href="{% url 'homework:problem_detail' pk=submission.problem.pk %}">{{ submission.problem.title }}</a></td>
+                    <td>
+                        <span class="{% if submission.status == 'passed' %}text-green{% elif submission.status == 'failed' %}text-red{% else %}text-yellow{% endif %}">
+                            {{ submission.get_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ submission.created_at|date:'M d, H:i' }}</td>
+                    <td>
+                        {% if submission.result %}
+                        <pre class="result-preview">{{ submission.result|truncatechars:100 }}</pre>
+                        {% else %}
+                        <em>No result</em>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No submissions yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- Assignment Summary -->
+    <div class="card">
+        <h2>Assignment Summary</h2>
+        {% for assignment in assignments %}
+        <h3>{{ assignment.title }}</h3>
+        {% if assignment.problems.all %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Problem</th>
+                    <th>Submissions</th>
+                    <th>Pass Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for problem in assignment.problems.all %}
+                {% with submissions=problem.submissions.all %}
+                <tr>
+                    <td><a href="{% url 'homework:problem_detail' pk=problem.pk %}">{{ problem.title }}</a></td>
+                    <td>{{ submissions|length }}</td>
+                    <td>{{ submissions|length }} submissions</td>
+                </tr>
+                {% endwith %}
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No problems in this assignment.</p>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+{% else %}
+    <!-- Student View -->
+    <div class="card">
+        <h2>My Submissions</h2>
+        {% if submissions %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Assignment</th>
+                    <th>Problem</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for submission in submissions %}
+                <tr>
+                    <td><a href="{% url 'homework:assignment_detail' slug=submission.problem.assignment.slug %}">{{ submission.problem.assignment.title }}</a></td>
+                    <td><a href="{% url 'homework:problem_detail' pk=submission.problem.pk %}">{{ submission.problem.title }}</a></td>
+                    <td>
+                        <span class="{% if submission.status == 'passed' %}text-green{% elif submission.status == 'failed' %}text-red{% else %}text-yellow{% endif %}">
+                            {{ submission.get_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ submission.created_at|date:'M d, H:i' }}</td>
+                    <td>
+                        {% if submission.result %}
+                        <pre class="result-preview">{{ submission.result|truncatechars:200 }}</pre>
+                        {% else %}
+                        <em>No result</em>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>You haven't submitted any solutions yet.</p>
+        {% endif %}
+    </div>
+{% endif %}
+
+<style>
+.text-green { color: #16a34a; font-weight: 600; }
+.text-red { color: #dc2626; font-weight: 600; }
+.text-yellow { color: #ca8a04; font-weight: 600; }
+.result-preview {
+    font-family: monospace;
+    font-size: 0.85rem;
+    background: #f8fafc;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-width: 300px;
+}
+</style>
+{% endblock %}

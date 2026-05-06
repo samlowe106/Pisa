@@ -15,51 +15,130 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Assignment',
+            name="Assignment",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=255)),
-                ('slug', models.SlugField(max_length=100, unique=True)),
-                ('description', models.TextField(blank=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('due_date', models.DateTimeField(blank=True, null=True)),
-                ('is_published', models.BooleanField(default=False)),
-                ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("title", models.CharField(max_length=255)),
+                ("slug", models.SlugField(max_length=100, unique=True)),
+                ("description", models.TextField(blank=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("due_date", models.DateTimeField(blank=True, null=True)),
+                ("is_published", models.BooleanField(default=False)),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-created_at'],
+                "ordering": ["-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='Problem',
+            name="Problem",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=255)),
-                ('statement', models.TextField(blank=True)),
-                ('starter_code', models.TextField(default='-- enter Lean code here\n')),
-                ('required_code', models.TextField(blank=True, default='', help_text='A code snippet that must remain in student submissions.')),
-                ('grading_stub', models.TextField(blank=True, default='', help_text='Optional Lean code appended to submissions for grading.')),
-                ('order', models.PositiveIntegerField(default=0)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('assignment', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='problems', to='homework.assignment')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("title", models.CharField(max_length=255)),
+                ("statement", models.TextField(blank=True)),
+                ("starter_code", models.TextField(default="-- enter Lean code here\n")),
+                (
+                    "required_code",
+                    models.TextField(
+                        blank=True,
+                        default="",
+                        help_text="A code snippet that must remain in student submissions.",
+                    ),
+                ),
+                (
+                    "grading_stub",
+                    models.TextField(
+                        blank=True,
+                        default="",
+                        help_text="Optional Lean code appended to submissions for grading.",
+                    ),
+                ),
+                ("order", models.PositiveIntegerField(default=0)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "assignment",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="problems",
+                        to="homework.assignment",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['order', 'created_at'],
+                "ordering": ["order", "created_at"],
             },
         ),
         migrations.CreateModel(
-            name='Submission',
+            name="Submission",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('code', models.TextField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('passed', 'Passed'), ('failed', 'Failed'), ('error', 'Error')], default='pending', max_length=10)),
-                ('result', models.TextField(blank=True)),
-                ('problem', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='submissions', to='homework.problem')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='submissions', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("code", models.TextField()),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("passed", "Passed"),
+                            ("failed", "Failed"),
+                            ("error", "Error"),
+                        ],
+                        default="pending",
+                        max_length=10,
+                    ),
+                ),
+                ("result", models.TextField(blank=True)),
+                (
+                    "problem",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="submissions",
+                        to="homework.problem",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="submissions",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-created_at'],
+                "ordering": ["-created_at"],
             },
         ),
     ]

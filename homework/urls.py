@@ -6,6 +6,7 @@ app_name = "homework"
 
 urlpatterns = [
     path("", views.DashboardView.as_view(), name="dashboard"),
+    path("grades/", views.GradesView.as_view(), name="grades"),
     path("assignments/", views.AssignmentListView.as_view(), name="assignment_list"),
     path(
         "assignments/create/",

@@ -25,6 +25,13 @@
     <h2>Instructor tools</h2>
     <p>Create a new assignment, add problems, and publish content for students.</p>
     <a class="button" href="{% url 'homework:assignment_create' %}">Create assignment</a>
+    <a class="button secondary" href="{% url 'homework:grades' %}">View all grades</a>
+</div>
+{% else %}
+<div class="card">
+    <h2>My progress</h2>
+    <p>Check your submission history and grades.</p>
+    <a class="button" href="{% url 'homework:grades' %}">View my grades</a>
 </div>
 {% endif %}
 {% endblock %}

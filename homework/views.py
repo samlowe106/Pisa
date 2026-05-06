@@ -53,6 +53,29 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class GradesView(LoginRequiredMixin, TemplateView):
+    template_name = "homework/grades.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.user.is_staff:
+            # Instructors see all submissions
+            context["submissions"] = Submission.objects.select_related(
+                "problem", "problem__assignment", "user"
+            ).order_by("-created_at")
+            context["assignments"] = Assignment.objects.prefetch_related(
+                "problems__submissions"
+            ).order_by("-created_at")
+        else:
+            # Students see only their submissions
+            context["submissions"] = (
+                Submission.objects.filter(user=self.request.user)
+                .select_related("problem", "problem__assignment")
+                .order_by("-created_at")
+            )
+        return context
+
+
 class AssignmentListView(LoginRequiredMixin, ListView):
     model = Assignment
     template_name = "homework/assignment_list.html"

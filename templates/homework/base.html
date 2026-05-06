@@ -153,10 +153,8 @@
         </div>
         <div class="nav-links">
             <a href="{% url 'homework:assignment_list' %}">Assignments</a>
+            <a href="{% url 'homework:grades' %}">Grades</a>
             {% if user.is_authenticated %}
-            {% if user.is_staff %}
-            <a href="{% url 'homework:assignment_create' %}">Create Assignment</a>
-            {% endif %}
             <form method="post" action="{% url 'logout' %}" style="display: inline;">
                 {% csrf_token %}
                 <button type="submit" style="background: none; border: none; color: #d1d5db; text-decoration: underline; cursor: pointer; font: inherit;">Logout</button>

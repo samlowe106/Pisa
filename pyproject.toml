@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
     "django>=5.1.7,<6",
     "pre-commit>=4.6.0",
+    "python-dotenv>=1.2.2",
 ]
 
 [tool.uv]

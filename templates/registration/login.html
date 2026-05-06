@@ -1,0 +1,27 @@
+{% extends 'homework/base.html' %}
+
+{% block title %}Login – Pisa{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>Login</h1>
+    <p class="meta">Sign in to access assignments and run Lean problems.</p>
+</div>
+<div class="card">
+    <form method="post" action="{% url 'login' %}">
+        {% csrf_token %}
+        {% if form.errors %}
+        <div class="alert">Please correct the error below.</div>
+        {% endif %}
+        <div class="field">
+            <label for="id_username">Username</label>
+            {{ form.username }}
+        </div>
+        <div class="field">
+            <label for="id_password">Password</label>
+            {{ form.password }}
+        </div>
+        <button class="button" type="submit">Login</button>
+    </form>
+</div>
+{% endblock %}

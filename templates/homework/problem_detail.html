@@ -1,0 +1,140 @@
+{% extends 'homework/base.html' %}
+
+{% block title %}{{ problem.title }} – Pisa{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.css" integrity="sha512-uf06llspW44/LZpHzHT6qBOIVODjWtv4MxCricRxkzvopAlSWnTf6hpZTFxuuZcuNE9CBQhqE0Seu1CoRk84nQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.js" integrity="sha512-t5Lcu24FbQybGnoIbv1GXDx633tW0Hd4reBUx74EIq/2Q39FzskADNbjc605pQA9kkojC+8bRXhHKEXoKJs3rw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/mode/simple.min.js" integrity="sha512-zyHuw9jVNShJwz2OsCfv7qBhVZRFK0Ez7u/NalYSm517xi9hVyQ71/FrFEPlAPvfoAZ/jmDT3ILXI3rwCLx0iA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+    .CodeMirror {
+        border: 1px solid #d1d5db;
+        border-radius: 0.5rem;
+        min-height: 360px;
+    }
+    .fallback-message {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+        padding: 0.75rem 1rem;
+        border-radius: 0.375rem;
+        margin-top: 1rem;
+    }
+</style>
+<script>
+    let leanEditor;
+
+    function showEditorFallback() {
+        const fallback = document.getElementById('lean-editor-fallback');
+        if (fallback) {
+            fallback.hidden = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        try {
+            if (typeof CodeMirror === 'undefined') {
+                throw new Error('CodeMirror is not available');
+            }
+
+            CodeMirror.defineSimpleMode('lean', {
+                start: [
+                    { regex: /--.*/, token: 'comment' },
+                    { regex: /--\|[\s\S]*?$/, token: 'comment' },
+                    { regex: /"(?:[^\\"]|\\.)*"/, token: 'string' },
+                    {
+                        regex: /\b(?:def|theorem|lemma|example|structure|inductive|namespace|section|import|open|end|by|have|let|if|then|else|match|with|fun|lambda|forall|exists|class|instance|namespace|begin|do)\b/,
+                        token: 'keyword',
+                    },
+                    { regex: /\b(?:Nat|Type|Prop|Sort|True|False|List|Option|Bool|String)\b/, token: 'atom' },
+                    { regex: /0x[0-9A-Fa-f]+|[0-9]+/, token: 'number' },
+                    { regex: /[:=\-+*/<>!]+/, token: 'operator' },
+                    { regex: /[\[\]{}()\.,;]/, token: 'bracket' },
+                ],
+                meta: {
+                    lineComment: '--',
+                },
+            });
+
+            const textarea = document.getElementById('lean-code');
+            leanEditor = CodeMirror.fromTextArea(textarea, {
+                mode: 'lean',
+                theme: 'default',
+                lineNumbers: true,
+                matchBrackets: true,
+                indentUnit: 2,
+                indentWithTabs: false,
+                autofocus: true,
+                tabSize: 2,
+                viewportMargin: Infinity,
+            });
+        } catch (error) {
+            console.warn('CodeMirror initialization failed:', error);
+            showEditorFallback();
+        }
+    });
+
+    async function runLean() {
+        const code = leanEditor ? leanEditor.getValue() : document.getElementById('lean-code').value;
+        const output = document.getElementById('lean-output');
+        output.textContent = 'Running Lean...';
+
+        const formData = new FormData();
+        formData.append('code', code);
+
+        const response = await fetch("{% url 'homework:problem_run' pk=problem.pk %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            output.textContent = 'Unable to run Lean. Server returned ' + response.status;
+            return;
+        }
+
+        const data = await response.json();
+        if (data.error) {
+            output.textContent = data.error;
+        } else {
+            output.textContent = data.stdout || data.stderr || 'Lean finished with exit code ' + data.returncode;
+        }
+    }
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>{{ problem.title }}</h1>
+    <p class="meta">Problem from {{ problem.assignment.title }}</p>
+    {% if user.is_staff %}
+    <a class="button secondary" href="{% url 'homework:problem_update' pk=problem.pk %}">Edit problem</a>
+    {% endif %}
+</div>
+<div class="card">
+    <h2>Statement</h2>
+    <p>{{ problem.statement|linebreaks }}</p>
+</div>
+<div class="card">
+    <h2>Lean editor</h2>
+    <form id="lean-form" onsubmit="event.preventDefault(); runLean();">
+        {% csrf_token %}
+        <div class="field">
+            <label for="lean-code">Lean code</label>
+            <textarea id="lean-code" name="code" class="mono">{{ problem.starter_code }}</textarea>
+            <div id="lean-editor-fallback" class="fallback-message" hidden>
+                Code highlighting failed to load. The editor will still work as a plain textarea. Please refresh the page or check your browser console/network tab for blocked resources.
+            </div>
+        </div>
+        <button class="button" type="submit">Run Lean</button>
+    </form>
+    <div class="field" style="margin-top:1rem;">
+        <label for="lean-output">Output</label>
+        <pre id="lean-output"></pre>
+    </div>
+    <p class="meta">Lean is executed on the server and output is shown here. Install Lean on the server to enable
+        execution.</p>
+</div>
+{% endblock %}

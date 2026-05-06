@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Pisa Homework{% endblock %}</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f8fafc;
+            color: #111827;
+        }
+
+        header,
+        .page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 1rem 1.5rem;
+        }
+
+        header {
+            background: #111827;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        header a {
+            color: #d1d5db;
+            text-decoration: none;
+        }
+
+        header a:hover {
+            color: white;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .hero {
+            padding: 1.5rem 0;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
+        }
+
+        .card+.card {
+            margin-top: 1rem;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1rem;
+            border-radius: 0.6rem;
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .button.secondary {
+            background: #6b7280;
+        }
+
+        pre,
+        textarea {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+            font-size: 0.95rem;
+        }
+
+        textarea {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.85rem;
+            min-height: 280px;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+        }
+
+        .field {
+            margin-bottom: 1rem;
+        }
+
+        .field label {
+            display: block;
+            margin-bottom: 0.35rem;
+            font-weight: 600;
+        }
+
+        .field input,
+        .field textarea {
+            width: 100%;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 0.75rem;
+            background: #f8d7da;
+            color: #842029;
+            border: 1px solid #f5c2c7;
+            margin-top: 1rem;
+        }
+
+        .footer {
+            margin-top: 2rem;
+            padding: 1rem 0;
+            text-align: center;
+            color: #6b7280;
+        }
+
+        .meta {
+            color: #4b5563;
+            font-size: 0.95rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 0.75rem 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+
+<body>
+    <header>
+        <div>
+            <a href="{% url 'homework:dashboard' %}"><strong>Pisa</strong></a>
+            <span style="margin-left: 1rem; color:#9ca3af;">Lean homework platform</span>
+        </div>
+        <div class="nav-links">
+            <a href="{% url 'homework:assignment_list' %}">Assignments</a>
+            {% if user.is_authenticated %}
+            {% if user.is_staff %}
+            <a href="{% url 'homework:assignment_create' %}">Create Assignment</a>
+            {% endif %}
+            <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" style="background: none; border: none; color: #d1d5db; text-decoration: underline; cursor: pointer; font: inherit;">Logout</button>
+            </form>
+            {% else %}
+            <a href="{% url 'login' %}">Login</a>
+            {% endif %}
+        </div>
+    </header>
+    <main class="page">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="footer">
+        Built for instructors and students using Lean.
+    </footer>
+</body>
+
+</html>

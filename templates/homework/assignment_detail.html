@@ -1,0 +1,35 @@
+{% extends 'homework/base.html' %}
+
+{% block title %}{{ assignment.title }} – Pisa{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>{{ assignment.title }}</h1>
+    <p class="meta">{% if assignment.due_date %}Due {{ assignment.due_date|date:'M d, Y H:i' }}{% else %}No due date
+        set{% endif %}</p>
+    {% if user.is_staff %}
+    <a class="button secondary" href="{% url 'homework:assignment_update' slug=assignment.slug %}">Edit assignment</a>
+    {% endif %}
+</div>
+<div class="card">
+    <h2>Description</h2>
+    <p>{{ assignment.description|linebreaks }}</p>
+</div>
+<div class="card">
+    <h2>Problems</h2>
+    {% if assignment.problems.all %}
+    <ol>
+        {% for problem in assignment.problems.all %}
+        <li>
+            <a href="{% url 'homework:problem_detail' pk=problem.pk %}">{{ problem.title }}</a>
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p>No problems have been added yet.</p>
+    {% endif %}
+    {% if user.is_staff %}
+    <a class="button" href="{% url 'homework:problem_create' assignment_slug=assignment.slug %}">Add problem</a>
+    {% endif %}
+</div>
+{% endblock %}

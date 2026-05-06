@@ -12,14 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         unzip \
     && rm -rf /var/lib/apt/lists/*
 
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- --default-toolchain leanprover/lean4:stable --yes --no-modify-path
 
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 
-RUN python -m pip install --upgrade pip setuptools wheel
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN /root/.local/bin/uv pip install --system -e .
 
 COPY . /app

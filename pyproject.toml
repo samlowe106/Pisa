@@ -15,6 +15,7 @@ classifiers = [
 ]
 dependencies = [
     "django>=5.1.7,<6",
+    "openpyxl>=3.1.5",
     "pre-commit>=4.6.0",
     "python-dotenv>=1.2.2",
 ]

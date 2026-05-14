@@ -4,7 +4,29 @@ from django.db import models
 User = get_user_model()
 
 
+class Course(models.Model):
+    title = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    instructor = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="courses_taught"
+    )
+    students = models.ManyToManyField(User, related_name="courses_enrolled", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
 class Assignment(models.Model):
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+    )
     title = models.CharField(max_length=255)
     slug = models.SlugField(max_length=100, unique=True)
     description = models.TextField(blank=True)
@@ -17,9 +39,10 @@ class Assignment(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        unique_together = ["course", "slug"]
 
     def __str__(self):
-        return self.title
+        return f"{self.course.title}: {self.title}"
 
 
 class Problem(models.Model):
@@ -40,6 +63,9 @@ class Problem(models.Model):
         help_text="Optional Lean code appended to submissions for grading.",
     )
     order = models.PositiveIntegerField(default=0)
+    points = models.PositiveIntegerField(
+        default=1, help_text="Points awarded for solving this problem"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

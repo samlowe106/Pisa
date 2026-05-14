@@ -7,11 +7,33 @@ app_name = "homework"
 urlpatterns = [
     path("", views.DashboardView.as_view(), name="dashboard"),
     path("grades/", views.GradesView.as_view(), name="grades"),
+    path("courses/", views.CourseListView.as_view(), name="course_list"),
+    path("courses/create/", views.CourseCreateView.as_view(), name="course_create"),
+    path(
+        "courses/<slug:slug>/edit/",
+        views.CourseUpdateView.as_view(),
+        name="course_update",
+    ),
+    path(
+        "courses/<slug:slug>/enroll/",
+        views.CourseEnrollView.as_view(),
+        name="course_enroll",
+    ),
+    path(
+        "courses/<slug:slug>/",
+        views.CourseDetailView.as_view(),
+        name="course_detail",
+    ),
     path("assignments/", views.AssignmentListView.as_view(), name="assignment_list"),
     path(
         "assignments/create/",
         views.AssignmentCreateView.as_view(),
         name="assignment_create",
+    ),
+    path(
+        "courses/<slug:course_slug>/assignments/create/",
+        views.AssignmentCreateView.as_view(),
+        name="assignment_create_for_course",
     ),
     path(
         "assignments/<slug:slug>/edit/",
@@ -41,5 +63,15 @@ urlpatterns = [
         "problems/<int:pk>/submit/",
         views.ProblemSubmitView.as_view(),
         name="problem_submit",
+    ),
+    path(
+        "courses/<slug:course_slug>/export/csv/",
+        views.ExportGradesCSVView.as_view(),
+        name="export_grades_csv",
+    ),
+    path(
+        "courses/<slug:course_slug>/export/excel/",
+        views.ExportGradesExcelView.as_view(),
+        name="export_grades_excel",
     ),
 ]

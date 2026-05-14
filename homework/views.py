@@ -1,4 +1,3 @@
-import os
 import shutil
 import subprocess
 import tempfile
@@ -9,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.forms import inlineformset_factory
 from django.http import HttpResponseBadRequest, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_POST
@@ -22,8 +21,8 @@ from django.views.generic import (
     View,
 )
 
-from .forms import AssignmentForm, ProblemForm
-from .models import Assignment, Problem, Submission
+from .forms import AssignmentForm, CourseForm, ProblemForm
+from .models import Assignment, Course, Problem, Submission
 
 ProblemFormSet = inlineformset_factory(
     Assignment,
@@ -37,6 +36,7 @@ ProblemFormSet = inlineformset_factory(
         "starter_code",
         "required_code",
         "grading_stub",
+        "points",
         "order",
     ],
 )
@@ -47,9 +47,17 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["assignments"] = Assignment.objects.filter(is_published=True).order_by(
-            "-created_at"
-        )
+        if self.request.user.is_staff:
+            context["courses"] = self.request.user.courses_taught.all()
+            context["assignments"] = Assignment.objects.filter(
+                course__in=self.request.user.courses_taught.all()
+            ).order_by("-created_at")
+        else:
+            context["courses"] = self.request.user.courses_enrolled.all()
+            context["assignments"] = Assignment.objects.filter(
+                course__students=self.request.user,
+                is_published=True,
+            ).order_by("-created_at")
         return context
 
 
@@ -59,15 +67,18 @@ class GradesView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         if self.request.user.is_staff:
-            # Instructors see all submissions
-            context["submissions"] = Submission.objects.select_related(
-                "problem", "problem__assignment", "user"
-            ).order_by("-created_at")
-            context["assignments"] = Assignment.objects.prefetch_related(
-                "problems__submissions"
-            ).order_by("-created_at")
+            courses = self.request.user.courses_taught.all()
+            context["submissions"] = (
+                Submission.objects.filter(problem__assignment__course__in=courses)
+                .select_related("problem", "problem__assignment", "user")
+                .order_by("-created_at")
+            )
+            context["assignments"] = (
+                Assignment.objects.filter(course__in=courses)
+                .prefetch_related("problems__submissions")
+                .order_by("-created_at")
+            )
         else:
-            # Students see only their submissions
             context["submissions"] = (
                 Submission.objects.filter(user=self.request.user)
                 .select_related("problem", "problem__assignment")
@@ -83,8 +94,12 @@ class AssignmentListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         if self.request.user.is_staff:
-            return Assignment.objects.all().order_by("-created_at")
-        return Assignment.objects.filter(is_published=True).order_by("-created_at")
+            return Assignment.objects.filter(
+                course__in=self.request.user.courses_taught.all()
+            ).order_by("-created_at")
+        return Assignment.objects.filter(
+            is_published=True, course__students=self.request.user
+        ).order_by("-created_at")
 
 
 class AssignmentDetailView(LoginRequiredMixin, DetailView):
@@ -93,7 +108,13 @@ class AssignmentDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "assignment"
 
     def get_queryset(self):
-        return Assignment.objects.filter(is_published=True)
+        if self.request.user.is_staff:
+            return Assignment.objects.filter(
+                course__in=self.request.user.courses_taught.all()
+            )
+        return Assignment.objects.filter(
+            is_published=True, course__students=self.request.user
+        )
 
 
 class AssignmentCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
@@ -101,6 +122,23 @@ class AssignmentCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     form_class = AssignmentForm
     template_name = "homework/assignment_form.html"
     success_url = reverse_lazy("homework:dashboard")
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields["course"].queryset = Course.objects.filter(
+            instructor=self.request.user
+        )
+        return form
+
+    def get_initial(self):
+        initial = super().get_initial()
+        course_slug = self.kwargs.get("course_slug") or self.request.GET.get("course")
+        if course_slug:
+            course = get_object_or_404(
+                Course, slug=course_slug, instructor=self.request.user
+            )
+            initial["course"] = course
+        return initial
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -119,8 +157,7 @@ class AssignmentCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
             problem_formset.instance = self.object
             problem_formset.save()
             return super().form_valid(form)
-        else:
-            return self.form_invalid(form)
+        return self.form_invalid(form)
 
     def test_func(self):
         return self.request.user.is_staff
@@ -130,6 +167,18 @@ class AssignmentUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = Assignment
     form_class = AssignmentForm
     template_name = "homework/assignment_form.html"
+
+    def get_queryset(self):
+        return Assignment.objects.filter(
+            course__in=self.request.user.courses_taught.all()
+        )
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields["course"].queryset = Course.objects.filter(
+            instructor=self.request.user
+        )
+        return form
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -149,8 +198,7 @@ class AssignmentUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
             problem_formset.instance = self.object
             problem_formset.save()
             return super().form_valid(form)
-        else:
-            return self.form_invalid(form)
+        return self.form_invalid(form)
 
     def get_success_url(self):
         return reverse_lazy(
@@ -161,13 +209,87 @@ class AssignmentUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         return self.request.user.is_staff
 
 
+class CourseListView(LoginRequiredMixin, ListView):
+    model = Course
+    template_name = "homework/course_list.html"
+    context_object_name = "courses"
+
+    def get_queryset(self):
+        if self.request.user.is_staff:
+            return Course.objects.filter(instructor=self.request.user).order_by(
+                "-created_at"
+            )
+        return Course.objects.all().order_by("-created_at")
+
+
+class CourseDetailView(LoginRequiredMixin, DetailView):
+    model = Course
+    template_name = "homework/course_detail.html"
+    context_object_name = "course"
+    slug_field = "slug"
+    slug_url_kwarg = "slug"
+
+    def get_queryset(self):
+        return Course.objects.all()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        course = self.object
+        if self.request.user.is_staff:
+            context["assignments"] = course.assignments.order_by("-created_at")
+        else:
+            context["assignments"] = course.assignments.filter(
+                is_published=True
+            ).order_by("-created_at")
+        return context
+
+
+class CourseCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
+    model = Course
+    form_class = CourseForm
+    template_name = "homework/course_form.html"
+    success_url = reverse_lazy("homework:course_list")
+
+    def form_valid(self, form):
+        form.instance.instructor = self.request.user
+        return super().form_valid(form)
+
+    def test_func(self):
+        return self.request.user.is_staff
+
+
+class CourseUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    model = Course
+    form_class = CourseForm
+    template_name = "homework/course_form.html"
+
+    def get_queryset(self):
+        return Course.objects.filter(instructor=self.request.user)
+
+    def test_func(self):
+        return self.request.user.is_staff
+
+
+class CourseEnrollView(LoginRequiredMixin, View):
+    def post(self, request, slug):
+        course = get_object_or_404(Course, slug=slug)
+        if request.user.is_staff:
+            return HttpResponseBadRequest("Instructors cannot enroll as students.")
+        course.students.add(request.user)
+        return redirect("homework:course_detail", slug=slug)
+
+
 class ProblemCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     model = Problem
     form_class = ProblemForm
     template_name = "homework/problem_form.html"
 
     def dispatch(self, request, *args, **kwargs):
-        self.assignment = get_object_or_404(Assignment, slug=kwargs["assignment_slug"])
+        self.assignment = get_object_or_404(
+            Assignment,
+            slug=kwargs["assignment_slug"],
+            course__in=request.user.courses_taught.all(),
+        )
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -193,6 +315,11 @@ class ProblemUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     form_class = ProblemForm
     template_name = "homework/problem_form.html"
 
+    def get_queryset(self):
+        return Problem.objects.filter(
+            assignment__course__in=self.request.user.courses_taught.all()
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["assignment"] = self.object.assignment
@@ -210,14 +337,20 @@ class ProblemDetailView(LoginRequiredMixin, DetailView):
     template_name = "homework/problem_detail.html"
     context_object_name = "problem"
 
+    def get_queryset(self):
+        queryset = Problem.objects.select_related("assignment", "assignment__course")
+        if self.request.user.is_staff:
+            return queryset.filter(
+                assignment__course__in=self.request.user.courses_taught.all()
+            )
+        return queryset.filter(
+            assignment__course__students=self.request.user,
+            assignment__is_published=True,
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if self.request.user.is_authenticated:
-            context["submissions"] = self.object.submissions.filter(
-                user=self.request.user
-            )
-        else:
-            context["submissions"] = []
+        context["submissions"] = self.object.submissions.filter(user=self.request.user)
         return context
 
 
@@ -292,7 +425,19 @@ def grade_lean_submission(problem: Problem, code: str) -> tuple[str, str]:
 @method_decorator([login_required, require_POST], name="dispatch")
 class ProblemRunView(View):
     def post(self, request, pk):
-        problem = get_object_or_404(Problem, pk=pk)
+        if request.user.is_staff:
+            get_object_or_404(
+                Problem,
+                pk=pk,
+                assignment__course__in=request.user.courses_taught.all(),
+            )
+        else:
+            get_object_or_404(
+                Problem,
+                pk=pk,
+                assignment__is_published=True,
+                assignment__course__students=request.user,
+            )
         code = request.POST.get("code")
         if code is None:
             return HttpResponseBadRequest("Missing code payload")
@@ -339,7 +484,19 @@ class ProblemRunView(View):
 @method_decorator([login_required, require_POST], name="dispatch")
 class ProblemSubmitView(View):
     def post(self, request, pk):
-        problem = get_object_or_404(Problem, pk=pk)
+        if request.user.is_staff:
+            problem = get_object_or_404(
+                Problem,
+                pk=pk,
+                assignment__course__in=request.user.courses_taught.all(),
+            )
+        else:
+            problem = get_object_or_404(
+                Problem,
+                pk=pk,
+                assignment__is_published=True,
+                assignment__course__students=request.user,
+            )
         code = request.POST.get("code")
         if code is None:
             return HttpResponseBadRequest("Missing code payload")
@@ -363,3 +520,37 @@ class ProblemSubmitView(View):
                 "result": result,
             }
         )
+
+
+class ExportGradesCSVView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """Export course grades as CSV for instructors."""
+
+    def test_func(self):
+        return self.request.user.is_staff
+
+    def get(self, request, course_slug):
+        from .exports import export_submissions_csv
+
+        course = get_object_or_404(Course, slug=course_slug, instructor=request.user)
+        submissions = Submission.objects.filter(
+            problem__assignment__course=course
+        ).order_by("-created_at")
+
+        return export_submissions_csv(submissions)
+
+
+class ExportGradesExcelView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """Export course grades as Excel for instructors."""
+
+    def test_func(self):
+        return self.request.user.is_staff
+
+    def get(self, request, course_slug):
+        from .exports import export_submissions_excel
+
+        course = get_object_or_404(Course, slug=course_slug, instructor=request.user)
+        submissions = Submission.objects.filter(
+            problem__assignment__course=course
+        ).order_by("-created_at")
+
+        return export_submissions_excel(submissions)

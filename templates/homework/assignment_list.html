@@ -16,6 +16,7 @@
         <thead>
             <tr>
                 <th>Title</th>
+                <th>Course</th>
                 <th>Due</th>
                 {% if user.is_staff %}<th>Status</th><th>Actions</th>{% endif %}
             </tr>
@@ -25,6 +26,7 @@
             <tr>
                 <td><a href="{% url 'homework:assignment_detail' slug=assignment.slug %}">{{ assignment.title }}</a>
                 </td>
+                <td><a href="{% url 'homework:course_detail' slug=assignment.course.slug %}">{{ assignment.course.title }}</a></td>
                 <td>{{ assignment.due_date|default:'TBD' }}</td>
                 {% if user.is_staff %}
                 <td>{% if assignment.is_published %}Published{% else %}Draft{% endif %}</td>

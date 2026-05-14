@@ -1,0 +1,41 @@
+{% extends 'homework/base.html' %}
+
+{% block title %}Courses – Pisa{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>Courses</h1>
+    <p class="meta">{% if user.is_staff %}Manage the courses you teach.{% else %}Browse available classes and enroll in the ones you want.{% endif %}</p>
+    {% if user.is_staff %}
+    <a class="button" href="{% url 'homework:course_create' %}">Create course</a>
+    {% endif %}
+</div>
+<div class="card">
+    {% if courses %}
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Description</th>
+                {% if user.is_staff %}<th>Students</th>{% else %}<th>Status</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for course in courses %}
+            <tr>
+                <td><a href="{% url 'homework:course_detail' slug=course.slug %}">{{ course.title }}</a></td>
+                <td>{{ course.description|truncatechars:120 }}</td>
+                {% if user.is_staff %}
+                <td>{{ course.students.count }}</td>
+                {% else %}
+                <td>{% if user in course.students.all %}Enrolled{% else %}Open{% endif %}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>{% if user.is_staff %}You haven't created any courses yet.{% else %}There are no courses available yet.{% endif %}</p>
+    {% endif %}
+</div>
+{% endblock %}

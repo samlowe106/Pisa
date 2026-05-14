@@ -8,6 +8,21 @@
     <p class="meta">Access published assignments and run Lean problems directly from your browser.</p>
 </div>
 <div class="card">
+    <h2>My courses</h2>
+    {% if courses %}
+    <ul>
+        {% for course in courses %}
+        <li><a href="{% url 'homework:course_detail' slug=course.slug %}">{{ course.title }}</a></li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>{% if user.is_staff %}You haven't created any courses yet.{% else %}You are not enrolled in any courses yet.{% endif %}</p>
+    {% endif %}
+    {% if user.is_staff %}
+    <a class="button" href="{% url 'homework:course_create' %}">Create course</a>
+    {% endif %}
+</div>
+<div class="card">
     <h2>Published assignments</h2>
     {% if assignments %}
     <ul>

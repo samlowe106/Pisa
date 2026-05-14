@@ -5,6 +5,7 @@
 {% block content %}
 <div class="hero">
     <h1>{{ assignment.title }}</h1>
+    <p class="meta">Course: <a href="{% url 'homework:course_detail' slug=assignment.course.slug %}">{{ assignment.course.title }}</a></p>
     <p class="meta">{% if assignment.due_date %}Due {{ assignment.due_date|date:'M d, Y H:i' }}{% else %}No due date
         set{% endif %}</p>
     {% if user.is_staff %}

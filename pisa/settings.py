@@ -128,9 +128,7 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-LEAN_EXECUTABLE = os.environ.get(
-    "LEAN_EXECUTABLE", str(Path.home() / ".elan" / "bin" / "lean")
-)
+LEAN_EXECUTABLE = os.environ.get("LEAN_EXECUTABLE", None)
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "homework:dashboard"

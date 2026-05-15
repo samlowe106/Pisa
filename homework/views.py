@@ -21,8 +21,8 @@ from django.views.generic import (
     View,
 )
 
-from .forms import AssignmentForm, CourseForm, ProblemForm
-from .models import Assignment, Course, Problem, Submission
+from .forms import AssignmentForm, CourseForm, ProblemBlockForm, ProblemForm
+from .models import Assignment, Course, Problem, ProblemBlock, Submission
 
 ProblemFormSet = inlineformset_factory(
     Assignment,
@@ -33,12 +33,20 @@ ProblemFormSet = inlineformset_factory(
     fields=[
         "title",
         "statement",
-        "starter_code",
         "required_code",
         "grading_stub",
         "points",
         "order",
     ],
+)
+
+ProblemBlockFormSet = inlineformset_factory(
+    Problem,
+    ProblemBlock,
+    form=ProblemBlockForm,
+    extra=1,
+    can_delete=True,
+    fields=["block_type", "content", "order"],
 )
 
 
@@ -295,11 +303,22 @@ class ProblemCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["assignment"] = self.assignment
+        if self.request.POST:
+            context["block_formset"] = ProblemBlockFormSet(self.request.POST)
+        else:
+            context["block_formset"] = ProblemBlockFormSet()
         return context
 
     def form_valid(self, form):
-        form.instance.assignment = self.assignment
-        return super().form_valid(form)
+        context = self.get_context_data()
+        block_formset = context["block_formset"]
+        if block_formset.is_valid():
+            form.instance.assignment = self.assignment
+            self.object = form.save()
+            block_formset.instance = self.object
+            block_formset.save()
+            return super().form_valid(form)
+        return self.form_invalid(form)
 
     def get_success_url(self):
         return reverse_lazy(
@@ -323,7 +342,23 @@ class ProblemUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["assignment"] = self.object.assignment
+        if self.request.POST:
+            context["block_formset"] = ProblemBlockFormSet(
+                self.request.POST, instance=self.object
+            )
+        else:
+            context["block_formset"] = ProblemBlockFormSet(instance=self.object)
         return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        block_formset = context["block_formset"]
+        if block_formset.is_valid():
+            self.object = form.save()
+            block_formset.instance = self.object
+            block_formset.save()
+            return super().form_valid(form)
+        return self.form_invalid(form)
 
     def get_success_url(self):
         return reverse_lazy("homework:problem_detail", kwargs={"pk": self.object.pk})
@@ -377,12 +412,23 @@ def grade_lean_submission(problem: Problem, code: str) -> tuple[str, str]:
             "Your submission does not include the required code snippet.",
         )
 
+    # Combine all code blocks in order
+    full_code = ""
+    for block in problem.blocks.order_by("order"):
+        if block.block_type in ["fixed_code", "editable_code"]:
+            if block.content:
+                full_code += block.content + "\n\n"
+
+    # If no blocks, use the submitted code directly
+    if not full_code.strip():
+        full_code = code
+
     source_path = None
     try:
         with tempfile.NamedTemporaryFile(
             "w+", suffix=".lean", delete=False
         ) as source_file:
-            source_file.write(code)
+            source_file.write(full_code)
             if problem.grading_stub:
                 source_file.write("\n\n")
                 source_file.write(problem.grading_stub)

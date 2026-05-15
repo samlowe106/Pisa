@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 
-from .models import Assignment, Course, Problem
+from .models import Assignment, Course, Problem, ProblemBlock
 
 User = get_user_model()
 
@@ -36,7 +36,6 @@ class ProblemForm(forms.ModelForm):
         fields = [
             "title",
             "statement",
-            "starter_code",
             "required_code",
             "grading_stub",
             "points",
@@ -44,8 +43,17 @@ class ProblemForm(forms.ModelForm):
         ]
         widgets = {
             "statement": forms.Textarea(attrs={"rows": 4}),
-            "starter_code": forms.Textarea(attrs={"rows": 14, "class": "mono"}),
             "required_code": forms.Textarea(attrs={"rows": 4, "class": "mono"}),
             "grading_stub": forms.Textarea(attrs={"rows": 6, "class": "mono"}),
             "points": forms.NumberInput(attrs={"type": "number", "min": "1"}),
+        }
+
+
+class ProblemBlockForm(forms.ModelForm):
+    class Meta:
+        model = ProblemBlock
+        fields = ["block_type", "content", "order"]
+        widgets = {
+            "content": forms.Textarea(attrs={"rows": 8, "class": "mono"}),
+            "order": forms.NumberInput(attrs={"type": "number", "min": "0"}),
         }

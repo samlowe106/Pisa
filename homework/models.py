@@ -51,7 +51,6 @@ class Problem(models.Model):
     )
     title = models.CharField(max_length=255)
     statement = models.TextField(blank=True)
-    starter_code = models.TextField(default="-- enter Lean code here\n")
     required_code = models.TextField(
         blank=True,
         default="",
@@ -73,6 +72,34 @@ class Problem(models.Model):
 
     def __str__(self):
         return f"{self.assignment.title}: {self.title}"
+
+
+class ProblemBlock(models.Model):
+    BLOCK_TYPE_TEXT = "text"
+    BLOCK_TYPE_FIXED_CODE = "fixed_code"
+    BLOCK_TYPE_EDITABLE_CODE = "editable_code"
+
+    BLOCK_TYPE_CHOICES = [
+        (BLOCK_TYPE_TEXT, "Plain Text"),
+        (BLOCK_TYPE_FIXED_CODE, "Fixed Code"),
+        (BLOCK_TYPE_EDITABLE_CODE, "Editable Code"),
+    ]
+
+    problem = models.ForeignKey(
+        Problem, on_delete=models.CASCADE, related_name="blocks"
+    )
+    block_type = models.CharField(
+        max_length=20, choices=BLOCK_TYPE_CHOICES, default=BLOCK_TYPE_EDITABLE_CODE
+    )
+    content = models.TextField(blank=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order"]
+        unique_together = ["problem", "order"]
+
+    def __str__(self):
+        return f"{self.problem.title} - {self.get_block_type_display()} (#{self.order})"
 
 
 class Submission(models.Model):

@@ -21,6 +21,35 @@
             {% endfor %}
         </div>
         {% endfor %}
+
+        <h3>Content Blocks</h3>
+        {{ block_formset.management_form }}
+        {% for block_form in block_formset %}
+        <div class="card" style="margin-top: 1rem; margin-bottom: 1rem;">
+            <h4>Block {{ forloop.counter }}{% if block_form.instance.pk %} (ID: {{ block_form.instance.pk }}){% endif %}</h4>
+            {% if block_formset.can_delete %}
+            <div class="field">
+                {{ block_form.DELETE }}
+                <label for="{{ block_form.DELETE.id_for_label }}">Delete this block</label>
+            </div>
+            {% endif %}
+            {% for field in block_form %}
+            {% if field.name != 'DELETE' %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}
+                <p class="meta">{{ field.help_text }}</p>
+                {% endif %}
+                {% for error in field.errors %}
+                <p class="alert">{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+
         <button class="button" type="submit">Save problem</button>
     </form>
 </div>

@@ -118,12 +118,27 @@
     <p>{{ problem.statement|linebreaks }}</p>
 </div>
 <div class="card">
+    <h2>Problem Content</h2>
+    {% for block in problem.blocks.all %}
+        {% if block.block_type == 'text' %}
+        <div class="field">
+            <p>{{ block.content|linebreaks }}</p>
+        </div>
+        {% elif block.block_type == 'fixed_code' %}
+        <div class="field">
+            <label>Fixed code (read-only)</label>
+            <pre class="mono" style="background: #f9f9f9; border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 1rem; font-size: 0.875rem; line-height: 1.5; overflow-x: auto;">{{ block.content }}</pre>
+        </div>
+        {% endif %}
+    {% endfor %}
+</div>
+<div class="card">
     <h2>Lean editor</h2>
     <form id="lean-form" onsubmit="event.preventDefault(); runLean();">
         {% csrf_token %}
         <div class="field">
             <label for="lean-code">Lean code</label>
-            <textarea id="lean-code" name="code" class="mono">{{ problem.starter_code }}</textarea>
+            <textarea id="lean-code" name="code" class="mono">{% for block in problem.blocks.all %}{% if block.block_type == 'editable_code' %}{{ block.content }}{% endif %}{% endfor %}</textarea>
             <div id="lean-editor-fallback" class="fallback-message" hidden>
                 Code highlighting failed to load. The editor will still work as a plain textarea. Please refresh the page or check your browser console/network tab for blocked resources.
             </div>

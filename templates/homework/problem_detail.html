@@ -76,11 +76,9 @@
 
     async function runLean() {
         const code = leanEditor ? leanEditor.getValue() : document.getElementById('lean-code').value;
-        const output = document.getElementById('lean-output');
         const status = document.getElementById('lean-status');
         const diagnostics = document.getElementById('lean-diagnostics');
 
-        output.textContent = 'Running Lean...';
         status.textContent = 'Running';
         diagnostics.textContent = '';
 
@@ -97,7 +95,6 @@
 
         if (!response.ok) {
             const msg = 'Unable to run Lean. Server returned ' + response.status;
-            output.textContent = msg;
             status.textContent = 'Error';
             diagnostics.textContent = msg;
             return;
@@ -105,37 +102,61 @@
 
         const data = await response.json();
         if (data.error) {
-            output.textContent = data.error;
             status.textContent = 'Error';
             diagnostics.textContent = data.error;
             return;
         }
 
-        // Show raw output
-        if (data.returncode === 0) {
-            output.textContent = data.stdout || data.stderr || 'Lean ran with no errors :)';
-        } else {
-            output.textContent = data.stdout || data.stderr || 'Lean finished with exit code ' + data.returncode;
-        }
-
-        // Update status
         status.textContent = data.returncode === 0 ? 'OK' : 'Failed (exit ' + data.returncode + ')';
 
-        // Parse stderr/stdout for useful diagnostics lines
         const combined = (data.stderr || '') + '\n' + (data.stdout || '');
         const lines = combined.split(/\r?\n/).filter(Boolean);
-
-        // Simple heuristic: show lines that contain 'error' or 'warning' or start with '!' or 'error:'
         const important = lines.filter(l => /error|warning|\b!\b|\berror:/i.test(l));
 
         if (important.length > 0) {
             diagnostics.textContent = important.join('\n');
         } else if (lines.length > 0) {
-            // otherwise show the last few lines
             diagnostics.textContent = lines.slice(-20).join('\n');
         } else {
-            diagnostics.textContent = 'No diagnostics produced.';
+            diagnostics.textContent = data.returncode === 0 ? 'Lean ran with no errors :)' : 'No diagnostics produced.';
         }
+    }
+
+    async function submitSolution() {
+        const code = leanEditor ? leanEditor.getValue() : document.getElementById('lean-code').value;
+        const status = document.getElementById('lean-status');
+        const diagnostics = document.getElementById('lean-diagnostics');
+
+        status.textContent = 'Submitting';
+        diagnostics.textContent = '';
+
+        const formData = new FormData();
+        formData.append('code', code);
+
+        const response = await fetch("{% url 'homework:problem_submit' pk=problem.pk %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const msg = 'Unable to submit. Server returned ' + response.status;
+            status.textContent = 'Error';
+            diagnostics.textContent = msg;
+            return;
+        }
+
+        const data = await response.json();
+        if (data.error) {
+            status.textContent = 'Error';
+            diagnostics.textContent = data.error;
+            return;
+        }
+
+        status.textContent = data.status || 'Submitted';
+        diagnostics.textContent = data.result || 'Submission completed.';
     }
 </script>
 {% endblock %}
@@ -180,13 +201,12 @@
                         Code highlighting failed to load. The editor will still work as a plain textarea. Please refresh the page or check your browser console/network tab for blocked resources.
                     </div>
                 </div>
-                <button class="button" type="submit">Run Lean</button>
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                    <button class="button" type="submit">Run Lean</button>
+                    <button class="button secondary" type="button" onclick="submitSolution();">Submit</button>
+                </div>
             </form>
-            <div class="field" style="margin-top:1rem;">
-                <label for="lean-output">Output</label>
-                <pre id="lean-output"></pre>
-            </div>
-            <p class="meta">Lean is executed on the server and output is shown here.</p>
+            <p class="meta">Lean is executed on the server and diagnostics are shown in the sidebar.</p>
         </div>
 
         <aside style="min-width: 280px;">

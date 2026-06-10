@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 import tempfile
@@ -405,7 +406,33 @@ def get_lean_executable() -> str:
     raise FileNotFoundError("Lean executable not found")
 
 
-def grade_lean_submission(problem: Problem, code: str) -> tuple[str, str]:
+def sanitize_lean_output(output: str, keep_internal: bool = False) -> str:
+    if keep_internal or not output:
+        return output or ""
+
+    lines = []
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if re.match(r"^info:", stripped, re.IGNORECASE):
+            continue
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+def filter_lean_response(response: dict, keep_internal: bool) -> dict:
+    filtered = response.copy()
+    for key in ("stdout", "stderr"):
+        if key in filtered and filtered[key] is not None:
+            filtered[key] = sanitize_lean_output(filtered[key], keep_internal)
+    return filtered
+
+
+def grade_lean_submission(
+    problem: Problem, code: str, keep_internal: bool = False
+) -> tuple[str, str]:
     if problem.required_code and problem.required_code.strip() not in code:
         return (
             Submission.STATUS_FAILED,
@@ -435,23 +462,46 @@ def grade_lean_submission(problem: Problem, code: str) -> tuple[str, str]:
             source_path = Path(source_file.name)
 
         command = [get_lean_executable(), str(source_path)]
-        result = subprocess.run(
-            command,
-            cwd=source_path.parent,
-            capture_output=True,
-            text=True,
-            timeout=12,
-        )
+        try:
+            result = subprocess.run(
+                command,
+                cwd=source_path.parent,
+                capture_output=True,
+                text=True,
+                timeout=getattr(settings, "LEAN_TIMEOUT", 60),
+            )
+        except subprocess.TimeoutExpired as e:
+            # include any partial output to help debugging
+            out = sanitize_lean_output(
+                getattr(e, "stdout", None) or getattr(e, "output", None) or "",
+                keep_internal=keep_internal,
+            )
+            err = sanitize_lean_output(
+                getattr(e, "stderr", None) or "",
+                keep_internal=keep_internal,
+            )
+            combined = (err + "\n" + out).strip() or ""
+            msg = "Lean execution timed out."
+            if combined:
+                msg += "\nPartial output:\n" + combined
+            return (Submission.STATUS_ERROR, msg)
+
         if result.returncode == 0:
             return (
                 Submission.STATUS_PASSED,
-                result.stdout or "Lean compiled successfully.",
+                sanitize_lean_output(
+                    result.stdout or "Lean ran with no errors :)",
+                    keep_internal=keep_internal,
+                ),
             )
         return (
             Submission.STATUS_FAILED,
-            result.stderr
-            or result.stdout
-            or f"Lean exited with code {result.returncode}",
+            sanitize_lean_output(
+                result.stderr
+                or result.stdout
+                or f"Lean exited with code {result.returncode}",
+                keep_internal=keep_internal,
+            ),
         )
     except FileNotFoundError:
         return (
@@ -497,18 +547,33 @@ class ProblemRunView(View):
                 source_path = Path(source_file.name)
 
             command = [get_lean_executable(), str(source_path)]
-            result = subprocess.run(
-                command,
-                cwd=source_path.parent,
-                capture_output=True,
-                text=True,
-                timeout=12,
-            )
-            response = {
-                "returncode": result.returncode,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-            }
+            try:
+                result = subprocess.run(
+                    command,
+                    cwd=source_path.parent,
+                    capture_output=True,
+                    text=True,
+                    timeout=getattr(settings, "LEAN_TIMEOUT", 60),
+                )
+                response = filter_lean_response(
+                    {
+                        "returncode": result.returncode,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                    },
+                    keep_internal=request.user.is_staff,
+                )
+            except subprocess.TimeoutExpired as e:
+                out = getattr(e, "stdout", None) or getattr(e, "output", None) or ""
+                err = getattr(e, "stderr", None) or ""
+                response = filter_lean_response(
+                    {
+                        "error": "Lean execution timed out.",
+                        "stdout": out,
+                        "stderr": err,
+                    },
+                    keep_internal=request.user.is_staff,
+                )
         except FileNotFoundError:
             response = {
                 "error": "Lean executable not found. Install Lean on the server or configure a Lean runtime.",
@@ -554,7 +619,9 @@ class ProblemSubmitView(View):
             status=Submission.STATUS_PENDING,
         )
 
-        status, result = grade_lean_submission(problem, code)
+        status, result = grade_lean_submission(
+            problem, code, keep_internal=request.user.is_staff
+        )
         submission.status = status
         submission.result = result
         submission.save(update_fields=["status", "result"])

@@ -77,7 +77,12 @@
     async function runLean() {
         const code = leanEditor ? leanEditor.getValue() : document.getElementById('lean-code').value;
         const output = document.getElementById('lean-output');
+        const status = document.getElementById('lean-status');
+        const diagnostics = document.getElementById('lean-diagnostics');
+
         output.textContent = 'Running Lean...';
+        status.textContent = 'Running';
+        diagnostics.textContent = '';
 
         const formData = new FormData();
         formData.append('code', code);
@@ -91,15 +96,41 @@
         });
 
         if (!response.ok) {
-            output.textContent = 'Unable to run Lean. Server returned ' + response.status;
+            const msg = 'Unable to run Lean. Server returned ' + response.status;
+            output.textContent = msg;
+            status.textContent = 'Error';
+            diagnostics.textContent = msg;
             return;
         }
 
         const data = await response.json();
         if (data.error) {
             output.textContent = data.error;
+            status.textContent = 'Error';
+            diagnostics.textContent = data.error;
+            return;
+        }
+
+        // Show raw output
+        output.textContent = data.stdout || data.stderr || 'Lean finished with exit code ' + data.returncode;
+
+        // Update status
+        status.textContent = data.returncode === 0 ? 'OK' : 'Failed (exit ' + data.returncode + ')';
+
+        // Parse stderr/stdout for useful diagnostics lines
+        const combined = (data.stderr || '') + '\n' + (data.stdout || '');
+        const lines = combined.split(/\r?\n/).filter(Boolean);
+
+        // Simple heuristic: show lines that contain 'error' or 'warning' or start with '!' or 'error:'
+        const important = lines.filter(l => /error|warning|\b!\b|\berror:/i.test(l));
+
+        if (important.length > 0) {
+            diagnostics.textContent = important.join('\n');
+        } else if (lines.length > 0) {
+            // otherwise show the last few lines
+            diagnostics.textContent = lines.slice(-20).join('\n');
         } else {
-            output.textContent = data.stdout || data.stderr || 'Lean finished with exit code ' + data.returncode;
+            diagnostics.textContent = 'No diagnostics produced.';
         }
     }
 </script>
@@ -133,23 +164,35 @@
     {% endfor %}
 </div>
 <div class="card">
-    <h2>Lean editor</h2>
-    <form id="lean-form" onsubmit="event.preventDefault(); runLean();">
-        {% csrf_token %}
-        <div class="field">
-            <label for="lean-code">Lean code</label>
-            <textarea id="lean-code" name="code" class="mono">{% for block in problem.blocks.all %}{% if block.block_type == 'editable_code' %}{{ block.content }}{% endif %}{% endfor %}</textarea>
-            <div id="lean-editor-fallback" class="fallback-message" hidden>
-                Code highlighting failed to load. The editor will still work as a plain textarea. Please refresh the page or check your browser console/network tab for blocked resources.
+    <div style="display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start;">
+        <div>
+            <h2>Lean editor</h2>
+            <form id="lean-form" onsubmit="event.preventDefault(); runLean();">
+                {% csrf_token %}
+                <div class="field">
+                    <label for="lean-code">Lean code</label>
+                    <textarea id="lean-code" name="code" class="mono">{% for block in problem.blocks.all %}{% if block.block_type == 'editable_code' %}{{ block.content }}{% endif %}{% endfor %}</textarea>
+                    <div id="lean-editor-fallback" class="fallback-message" hidden>
+                        Code highlighting failed to load. The editor will still work as a plain textarea. Please refresh the page or check your browser console/network tab for blocked resources.
+                    </div>
+                </div>
+                <button class="button" type="submit">Run Lean</button>
+            </form>
+            <div class="field" style="margin-top:1rem;">
+                <label for="lean-output">Output</label>
+                <pre id="lean-output"></pre>
             </div>
+            <p class="meta">Lean is executed on the server and output is shown here. Install Lean on the server to enable
+                execution.</p>
         </div>
-        <button class="button" type="submit">Run Lean</button>
-    </form>
-    <div class="field" style="margin-top:1rem;">
-        <label for="lean-output">Output</label>
-        <pre id="lean-output"></pre>
+
+        <aside style="min-width: 280px;">
+            <div class="card">
+                <h3>Lean Diagnostics</h3>
+                <div id="lean-status" class="meta">No run yet</div>
+                <div id="lean-diagnostics" style="margin-top: 0.5rem; max-height: 420px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 0.9rem; white-space: pre-wrap;"></div>
+            </div>
+        </aside>
     </div>
-    <p class="meta">Lean is executed on the server and output is shown here. Install Lean on the server to enable
-        execution.</p>
 </div>
 {% endblock %}

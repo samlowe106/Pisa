@@ -174,10 +174,10 @@
             <span style="margin-left: 1rem; color:#9ca3af;">Lean homework platform</span>
         </div>
         <div class="nav-links">
+            {% if user.is_authenticated %}
             <a href="{% url 'homework:assignment_list' %}">Assignments</a>
             <a href="{% url 'homework:course_list' %}">Courses</a>
             <a href="{% url 'homework:grades' %}">Grades</a>
-            {% if user.is_authenticated %}
             <form method="post" action="{% url 'logout' %}" style="display: inline;">
                 {% csrf_token %}
                 <button type="submit" style="background: none; border: none; color: #d1d5db; text-decoration: underline; cursor: pointer; font: inherit;">Logout</button>

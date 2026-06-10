@@ -129,6 +129,7 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LEAN_EXECUTABLE = os.environ.get("LEAN_EXECUTABLE", None)
+LEAN_TIMEOUT = int(os.environ.get("LEAN_TIMEOUT", "60"))
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "homework:dashboard"

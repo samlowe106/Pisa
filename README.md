@@ -1,6 +1,6 @@
-# Pisa
+# 📝 Pisa
 
-Pisa is a website for teachers to design and assign programming and proof assignments in [Lean4](https://lean-lang.org/), Microsoft's open-source proof assistant. Pisa is powered by [Django](https://www.djangoproject.com/).
+Pisa is a [Django](https://www.djangoproject.com/) website for teachers to design and assign programming and proof assignments in [Lean4](https://lean-lang.org/), Microsoft's open-source proof assistant.
 
 ## Install
 

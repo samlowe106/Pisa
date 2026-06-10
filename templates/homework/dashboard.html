@@ -27,8 +27,7 @@
     {% if assignments %}
     <ul>
         {% for assignment in assignments %}
-        <li><a href="{% url 'homework:assignment_detail' slug=assignment.slug %}">{{ assignment.title }}</a> · {{
-            assignment.created_at|date:'M d, Y' }}</li>
+        <li><a href="{% url 'homework:assignment_detail' slug=assignment.slug %}">{{ assignment.title }}</a> · Created {{ assignment.created_at|date:'M d, Y' }}</li>
         {% endfor %}
     </ul>
     {% else %}

@@ -112,7 +112,11 @@
         }
 
         // Show raw output
-        output.textContent = data.stdout || data.stderr || 'Lean finished with exit code ' + data.returncode;
+        if (data.returncode === 0) {
+            output.textContent = data.stdout || data.stderr || 'Lean ran with no errors :)';
+        } else {
+            output.textContent = data.stdout || data.stderr || 'Lean finished with exit code ' + data.returncode;
+        }
 
         // Update status
         status.textContent = data.returncode === 0 ? 'OK' : 'Failed (exit ' + data.returncode + ')';
@@ -182,8 +186,7 @@
                 <label for="lean-output">Output</label>
                 <pre id="lean-output"></pre>
             </div>
-            <p class="meta">Lean is executed on the server and output is shown here. Install Lean on the server to enable
-                execution.</p>
+            <p class="meta">Lean is executed on the server and output is shown here.</p>
         </div>
 
         <aside style="min-width: 280px;">

@@ -1,15 +1,38 @@
-.git
-.gitignore
-.venv
-.env
-__pycache__
+# Python
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+.venv/
+venv/
+
+# Django
+db.sqlite3
+data/
+*.sqlite3
+
+# env files
+.env
+
+# Node
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# misc
 build
 dist
-*.sqlite3
 uploads
-node_modules
-.vscode

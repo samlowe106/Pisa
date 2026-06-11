@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 
-from .models import Assignment, Course, Problem, ProblemBlock
+from .models import Assignment, Course, LeanSourceFile, Problem, ProblemBlock
 
 User = get_user_model()
 
@@ -23,10 +23,28 @@ class CourseForm(forms.ModelForm):
 class AssignmentForm(forms.ModelForm):
     class Meta:
         model = Assignment
-        fields = ["course", "title", "slug", "description", "due_date", "is_published"]
+        fields = [
+            "course",
+            "title",
+            "slug",
+            "description",
+            "due_date",
+            "is_published",
+            "source_files",
+        ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 4}),
             "due_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "source_files": forms.SelectMultiple(attrs={"size": 6}),
+        }
+
+
+class LeanSourceFileForm(forms.ModelForm):
+    class Meta:
+        model = LeanSourceFile
+        fields = ["title", "slug", "content", "visible"]
+        widgets = {
+            "content": forms.Textarea(attrs={"rows": 12, "class": "mono"}),
         }
 
 

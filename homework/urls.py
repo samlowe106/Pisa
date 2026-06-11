@@ -65,6 +65,21 @@ urlpatterns = [
         name="problem_submit",
     ),
     path(
+        "lean-files/",
+        views.LeanSourceFileListView.as_view(),
+        name="lean_source_file_list",
+    ),
+    path(
+        "lean-files/create/",
+        views.LeanSourceFileCreateView.as_view(),
+        name="lean_source_file_create",
+    ),
+    path(
+        "lean-files/<int:pk>/edit/",
+        views.LeanSourceFileUpdateView.as_view(),
+        name="lean_source_file_update",
+    ),
+    path(
         "courses/<slug:course_slug>/export/csv/",
         views.ExportGradesCSVView.as_view(),
         name="export_grades_csv",

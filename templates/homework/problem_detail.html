@@ -175,6 +175,20 @@
 </div>
 <div class="card">
     <h2>Problem Content</h2>
+    {% if source_files %}
+    <div class="field">
+        <label>Imported Lean source files</label>
+        {% for source_file in source_files %}
+        <div style="margin-bottom:1rem;">
+            <strong>{{ source_file.title }}</strong>
+            {% if user.is_staff %}
+            <span class="meta">({{ source_file.visible|yesno:"Visible,Hidden" }})</span>
+            {% endif %}
+            <pre class="mono" style="background: #f9f9f9; border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 1rem; font-size: 0.875rem; line-height: 1.5; overflow-x: auto;">{{ source_file.content }}</pre>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
     {% for block in problem.blocks.all %}
         {% if block.block_type == 'text' %}
         <div class="field">

@@ -16,6 +16,22 @@
     <h2>Description</h2>
     <p>{{ assignment.description|linebreaks }}</p>
 </div>
+{% if source_files %}
+<div class="card">
+    <h2>Imported Lean source files</h2>
+    <ul>
+        {% for source_file in source_files %}
+        <li>
+            <strong>{{ source_file.title }}</strong>
+            {% if user.is_staff %}
+            <span class="meta">({{ source_file.visible|yesno:"Visible,Hidden" }})</span>
+            {% endif %}
+            <pre class="mono" style="background:#f9f9f9;border:1px solid #d1d5db;border-radius:0.5rem;padding:1rem;overflow-x:auto;">{{ source_file.content }}</pre>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
 <div class="card">
     <h2>Problems</h2>
     {% if assignment.problems.all %}

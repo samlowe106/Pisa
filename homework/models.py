@@ -27,6 +27,11 @@ class Assignment(models.Model):
         on_delete=models.CASCADE,
         related_name="assignments",
     )
+    source_files = models.ManyToManyField(
+        "LeanSourceFile",
+        blank=True,
+        related_name="assignments",
+    )
     title = models.CharField(max_length=255)
     slug = models.SlugField(max_length=100, unique=True)
     description = models.TextField(blank=True)
@@ -43,6 +48,28 @@ class Assignment(models.Model):
 
     def __str__(self):
         return f"{self.course.title}: {self.title}"
+
+
+class LeanSourceFile(models.Model):
+    title = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=100, unique=True)
+    content = models.TextField(blank=True)
+    visible = models.BooleanField(
+        default=True,
+        help_text="Visible to students when imported into an assignment.",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="lean_source_files",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title"]
+
+    def __str__(self):
+        return self.title
 
 
 class Problem(models.Model):

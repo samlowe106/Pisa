@@ -1,11 +1,38 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.shortcuts import get_object_or_404
-from django.views.generic import View
+from django.views.generic import TemplateView, View
 
 from ..models import (
+    Assignment,
     Course,
     Submission,
 )
+
+
+class GradesView(LoginRequiredMixin, TemplateView):
+    template_name = "homework/grades.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.user.is_staff:
+            courses = self.request.user.courses_taught.all()
+            context["submissions"] = (
+                Submission.objects.filter(problem__assignment__course__in=courses)
+                .select_related("problem", "problem__assignment", "user")
+                .order_by("-created_at")
+            )
+            context["assignments"] = (
+                Assignment.objects.filter(course__in=courses)
+                .prefetch_related("problems__submissions")
+                .order_by("-created_at")
+            )
+        else:
+            context["submissions"] = (
+                Submission.objects.filter(user=self.request.user)
+                .select_related("problem", "problem__assignment")
+                .order_by("-created_at")
+            )
+        return context
 
 
 class ExportGradesCSVView(LoginRequiredMixin, UserPassesTestMixin, View):

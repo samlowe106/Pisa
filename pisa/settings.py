@@ -42,8 +42,18 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "channels",
     "homework",
 ]
+
+ASGI_APPLICATION = "pisa.asgi.application"
+
+# In-memory channel layer for development. Replace with Redis in production.
+CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+# Command used to spawn the Lean LSP. Can be overridden via env var.
+LEAN_LSP_CMD = os.environ.get("LEAN_LSP_CMD", "lean --server").split()
+LEAN_LSP_TIMEOUT = int(os.environ.get("LEAN_LSP_TIMEOUT", "60"))
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -82,7 +92,7 @@ WSGI_APPLICATION = "pisa.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": BASE_DIR / "data" / "db.sqlite3",
     }
 }
 

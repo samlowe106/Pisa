@@ -20,11 +20,6 @@ from .assignments import (
     AssignmentDetailView,
     AssignmentListView,
     AssignmentUpdateView,
-    ProblemCreateView,
-    ProblemDetailView,
-    ProblemRunView,
-    ProblemSubmitView,
-    ProblemUpdateView,
 )
 from .courses import (
     CourseCreateView,
@@ -39,4 +34,11 @@ from .lean_source_files import (
     LeanSourceFileCreateView,
     LeanSourceFileListView,
     LeanSourceFileUpdateView,
+)
+from .problems import (
+    ProblemCreateView,
+    ProblemDetailView,
+    ProblemRunView,
+    ProblemSubmitView,
+    ProblemUpdateView,
 )

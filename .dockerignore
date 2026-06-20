@@ -29,6 +29,12 @@ node_modules/
 # Logs
 *.log
 
+# Coverage / test artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # OS
 .DS_Store
 

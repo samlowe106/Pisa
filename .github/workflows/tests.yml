@@ -1,0 +1,57 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests + coverage (in Docker)
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build the `test` stage once, caching the heavy layers (apt, uv deps, the
+      # Lean toolchain) in the GitHub Actions cache so later runs skip rebuilding
+      # them. `load: true` puts the image into the local Docker daemon so we can
+      # run it in the next step.
+      - name: Build test image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: test
+          load: true
+          tags: pisa-test:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Run the suite under coverage inside the image. The container is named (not
+      # --rm) so we can copy the reports out even if tests fail.
+      - name: Run tests with coverage
+        run: |
+          docker run --name pisa-tests \
+            -e SECRET_KEY=ci-test-secret-key-not-for-production \
+            pisa-test:ci \
+            sh -c 'coverage run manage.py test --verbosity=2; status=$?; coverage report; coverage xml; coverage html; exit $status'
+
+      - name: Extract coverage reports
+        if: always()
+        run: |
+          mkdir -p coverage-out
+          docker cp pisa-tests:/app/coverage.xml coverage-out/coverage.xml || true
+          docker cp pisa-tests:/app/htmlcov coverage-out/htmlcov || true
+          docker rm pisa-tests || true
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage-out/
+          if-no-files-found: warn

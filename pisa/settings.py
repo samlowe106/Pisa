@@ -57,6 +57,7 @@ LEAN_LSP_TIMEOUT = int(os.environ.get("LEAN_LSP_TIMEOUT", "60"))
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "csp.middleware.CSPMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -64,6 +65,33 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Content Security Policy (django-csp 4.x). Restricts which hosts the browser will
+# load scripts/styles/etc. from, so an injected or compromised external resource
+# (e.g. the polyfill.io supply-chain attack) is blocked at runtime.
+#
+# NOTE: 'unsafe-inline' is kept for script/style because the app still uses inline
+# <script> blocks and inline event handlers (onsubmit/onclick). The external-host
+# allowlist below still fully applies. Once the inline JS is extracted (todo #5),
+# switch those handlers to addEventListener and replace 'unsafe-inline' with
+# per-request nonces (request.csp_nonce) for stricter protection.
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        "connect-src": [
+            "'self'",
+            "ws:",
+            "wss:",
+        ],  # Lean LSP websocket (channels/daphne)
+        "img-src": ["'self'", "data:"],
+        "font-src": ["'self'", "data:"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "frame-ancestors": ["'self'"],
+    }
+}
 
 ROOT_URLCONF = "pisa.urls"
 

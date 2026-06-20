@@ -100,6 +100,24 @@ header a:hover {
     gap: 1rem;
 }
 
+.brand-tagline {
+    color: #9ca3af;
+    margin-left: 1rem;
+}
+
+.logout-form {
+    display: inline;
+}
+
+.link-button {
+    background: none;
+    border: none;
+    color: #d1d5db;
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+}
+
 
 /* TYPOGRAPHY/UTILITIES */
 
@@ -114,6 +132,14 @@ header a:hover {
 
 .hidden {
     display: none !important;
+}
+
+.spaced-item {
+    margin-bottom: 1rem;
+}
+
+.item-actions {
+    margin-top: 0.5rem;
 }
 
 
@@ -165,6 +191,11 @@ header a:hover {
     margin-top: 1rem;
 }
 
+.card-spaced {
+    margin-bottom: 1rem;
+    margin-top: 1rem;
+}
+
 
 /* CodeMirror */
 
@@ -199,6 +230,15 @@ header a:hover {
     resize: vertical;
     white-space: pre;
     width: 100%;
+}
+
+.code-block {
+    background: #f9fafb;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    overflow-x: auto;
+    padding: 1rem;
 }
 
 
@@ -340,4 +380,54 @@ header a:hover {
 
 .lean-tab-panel.active {
     display: block;
+}
+
+
+/* Grades */
+
+.text-green {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.text-red {
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.text-yellow {
+    color: #ca8a04;
+    font-weight: 600;
+}
+
+.result-preview {
+    background: #f8fafc;
+    border-radius: 0.25rem;
+    font-family: monospace;
+    font-size: 0.85rem;
+    margin: 0;
+    max-width: 300px;
+    padding: 0.25rem 0.5rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+
+/* Problem Editor Layout */
+
+.problem-layout {
+    align-items: start;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr 320px;
+}
+
+.problem-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.problem-sidebar {
+    min-width: 280px;
 }

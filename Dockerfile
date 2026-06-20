@@ -30,11 +30,15 @@ RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init
 
 WORKDIR /app
 
-# Install Python dependencies before copying source so this layer caches
-# independently of application code changes. The uv cache mount speeds re-resolves.
+# Install only the locked *dependencies* before copying source, so this layer caches
+# independently of application code. The project itself is not installed: `pisa` is an
+# application run via `manage.py` from /app, not a package to build (and its source isn't
+# present at this layer). The uv cache mount speeds re-resolves.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    /root/.local/bin/uv pip install --system -e .
+    /root/.local/bin/uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
+    && /root/.local/bin/uv pip install --system -r /tmp/requirements.txt \
+    && rm -f /tmp/requirements.txt
 
 
 # --- test: base + dev tooling (coverage) + source. Built by CI (--target test). ---

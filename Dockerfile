@@ -25,8 +25,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # elan-init is rustup-style: the unattended flag is `-y` (NOT `--yes`). With `--yes`
 # it can't recognize the request, tries to prompt, and fails in a non-interactive build.
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# elan only *records* the default toolchain; `lean --version` forces the actual toolchain
+# download so Lean is baked into this layer (otherwise `lean --server` would download
+# hundreds of MB on first use in every container, breaking live feedback).
 RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
-    | sh -s -- -y --default-toolchain leanprover/lean4:stable --no-modify-path
+    | sh -s -- -y --default-toolchain leanprover/lean4:stable --no-modify-path \
+    && lean --version
 
 WORKDIR /app
 

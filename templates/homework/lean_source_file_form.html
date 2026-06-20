@@ -3,25 +3,12 @@
 {% block title %}{% if object %}Edit{% else %}Create{% endif %} Lean Source File – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>{% if object %}Edit{% else %}Create{% endif %} Lean source file</h1>
-</div>
-<div class="card">
+{% with h=object|yesno:"Edit Lean source file,Create Lean source file" %}<c-page-header :title="h" />{% endwith %}
+<c-card>
     <form method="post">
         {% csrf_token %}
-        {% for field in form %}
-        <div class="field">
-            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% if field.help_text %}
-            <p class="meta">{{ field.help_text }}</p>
-            {% endif %}
-            {% for error in field.errors %}
-            <p class="alert">{{ error }}</p>
-            {% endfor %}
-        </div>
-        {% endfor %}
+        <c-form-fields :form="form" />
         <button class="button" type="submit">Save source file</button>
     </form>
-</div>
+</c-card>
 {% endblock %}

@@ -3,19 +3,18 @@
 {% block title %}Lean Source Files – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>Lean source files</h1>
+<c-page-header title="Lean source files">
     <p class="meta">Create reusable Lean files and attach them to assignments.</p>
     <a class="button" href="{% url 'homework:lean_source_file_create' %}">Add source file</a>
-</div>
-<div class="card">
+</c-page-header>
+<c-card>
     {% if source_files %}
     <ul>
         {% for source_file in source_files %}
-        <li style="margin-bottom: 1rem;">
+        <li class="spaced-item">
             <strong>{{ source_file.title }}</strong>
             <span class="meta">({{ source_file.visible|yesno:"Visible,Hidden" }})</span>
-            <div style="margin-top: 0.5rem;">
+            <div class="item-actions">
                 <a class="button secondary" href="{% url 'homework:lean_source_file_update' pk=source_file.pk %}">Edit</a>
             </div>
         </li>
@@ -24,5 +23,5 @@
     {% else %}
     <p>No Lean source files have been created yet.</p>
     {% endif %}
-</div>
+</c-card>
 {% endblock %}

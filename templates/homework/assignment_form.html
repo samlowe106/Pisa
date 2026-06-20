@@ -3,29 +3,16 @@
 {% block title %}{% if object %}Edit{% else %}Create{% endif %} Assignment – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>{% if object %}Edit{% else %}Create{% endif %} Assignment</h1>
-</div>
-<div class="card">
+{% with h=object|yesno:"Edit Assignment,Create Assignment" %}<c-page-header :title="h" />{% endwith %}
+<c-card>
     <form method="post">
         {% csrf_token %}
-        {% for field in form %}
-        <div class="field">
-            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% if field.help_text %}
-            <p class="meta">{{ field.help_text }}</p>
-            {% endif %}
-            {% for error in field.errors %}
-            <p class="alert">{{ error }}</p>
-            {% endfor %}
-        </div>
-        {% endfor %}
+        <c-form-fields :form="form" />
 
         <h3>Problems</h3>
         {{ problem_formset.management_form }}
         {% for problem_form in problem_formset %}
-        <div class="card" style="margin-top: 1rem; margin-bottom: 1rem;">
+        <c-card class="card-spaced">
             <h4>Problem {{ forloop.counter }}{% if problem_form.instance.pk %} (ID: {{ problem_form.instance.pk }}){% endif %}</h4>
             {% if problem_formset.can_delete %}
             <div class="field">
@@ -33,24 +20,11 @@
                 <label for="{{ problem_form.DELETE.id_for_label }}">Delete this problem</label>
             </div>
             {% endif %}
-            {% for field in problem_form %}
-            {% if field.name != 'DELETE' %}
-            <div class="field">
-                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.help_text %}
-                <p class="meta">{{ field.help_text }}</p>
-                {% endif %}
-                {% for error in field.errors %}
-                <p class="alert">{{ error }}</p>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% endfor %}
-        </div>
+            <c-form-fields :form="problem_form" exclude="DELETE" />
+        </c-card>
         {% endfor %}
 
         <button class="button" type="submit">Save assignment</button>
     </form>
-</div>
+</c-card>
 {% endblock %}

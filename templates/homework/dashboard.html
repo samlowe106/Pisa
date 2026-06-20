@@ -3,12 +3,11 @@
 {% block title %}Dashboard – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>Welcome, {{ user.get_full_name|default:user.username }}</h1>
+<c-page-header>
+    <c-slot name="title">Welcome, {{ user.get_full_name|default:user.username }}</c-slot>
     <p class="meta">Access published assignments and run Lean problems directly from your browser.</p>
-</div>
-<div class="card">
-    <h2>My courses</h2>
+</c-page-header>
+<c-card heading="My courses">
     {% if courses %}
     <ul>
         {% for course in courses %}
@@ -21,9 +20,8 @@
     {% if user.is_staff %}
     <a class="button" href="{% url 'homework:course_create' %}">Create course</a>
     {% endif %}
-</div>
-<div class="card">
-    <h2>Published assignments</h2>
+</c-card>
+<c-card heading="Published assignments">
     {% if assignments %}
     <ul>
         {% for assignment in assignments %}
@@ -33,19 +31,17 @@
     {% else %}
     <p>No assignments are available yet.</p>
     {% endif %}
-</div>
+</c-card>
 {% if user.is_staff %}
-<div class="card">
-    <h2>Instructor tools</h2>
+<c-card heading="Instructor tools">
     <p>Create a new assignment, add problems, and publish content for students.</p>
     <a class="button" href="{% url 'homework:assignment_create' %}">Create assignment</a>
     <a class="button secondary" href="{% url 'homework:grades' %}">View all grades</a>
-</div>
+</c-card>
 {% else %}
-<div class="card">
-    <h2>My progress</h2>
+<c-card heading="My progress">
     <p>Check your submission history and grades.</p>
     <a class="button" href="{% url 'homework:grades' %}">View my grades</a>
-</div>
+</c-card>
 {% endif %}
 {% endblock %}

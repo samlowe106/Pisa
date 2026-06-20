@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_cotton.apps.SimpleAppConfig",
     "channels",
     "homework",
 ]
@@ -99,8 +100,21 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
-        "APP_DIRS": True,
+        # APP_DIRS must stay off: django-cotton needs explicit loaders, which
+        # can't coexist with APP_DIRS. app_directories.Loader below restores
+        # app-template discovery (admin, auth, etc.).
         "OPTIONS": {
+            "loaders": [
+                (
+                    "django.template.loaders.cached.Loader",
+                    [
+                        "django_cotton.cotton_loader.Loader",
+                        "django.template.loaders.filesystem.Loader",
+                        "django.template.loaders.app_directories.Loader",
+                    ],
+                )
+            ],
+            "builtins": ["django_cotton.templatetags.cotton"],
             "context_processors": [
                 "django.template.context_processors.debug",
                 "django.template.context_processors.request",

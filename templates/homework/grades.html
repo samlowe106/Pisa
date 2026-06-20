@@ -3,15 +3,14 @@
 {% block title %}Grades – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>{% if user.is_staff %}All Grades{% else %}My Grades{% endif %}</h1>
+<c-page-header>
+    <c-slot name="title">{% if user.is_staff %}All Grades{% else %}My Grades{% endif %}</c-slot>
     <p class="meta">{% if user.is_staff %}View all student submissions and grades{% else %}View your submission history and results{% endif %}</p>
-</div>
+</c-page-header>
 
 {% if user.is_staff %}
     <!-- Instructor View -->
-    <div class="card">
-        <h2>Recent Submissions</h2>
+    <c-card heading="Recent Submissions">
         {% if submissions %}
         <table>
             <thead>
@@ -50,11 +49,10 @@
         {% else %}
         <p>No submissions yet.</p>
         {% endif %}
-    </div>
+    </c-card>
 
     <!-- Assignment Summary -->
-    <div class="card">
-        <h2>Assignment Summary</h2>
+    <c-card heading="Assignment Summary">
         {% for assignment in assignments %}
         <h3>{{ assignment.title }}</h3>
         {% if assignment.problems.all %}
@@ -82,12 +80,11 @@
         <p>No problems in this assignment.</p>
         {% endif %}
         {% endfor %}
-    </div>
+    </c-card>
 
 {% else %}
     <!-- Student View -->
-    <div class="card">
-        <h2>My Submissions</h2>
+    <c-card heading="My Submissions">
         {% if submissions %}
         <table>
             <thead>
@@ -124,23 +121,6 @@
         {% else %}
         <p>You haven't submitted any solutions yet.</p>
         {% endif %}
-    </div>
+    </c-card>
 {% endif %}
-
-<style>
-.text-green { color: #16a34a; font-weight: 600; }
-.text-red { color: #dc2626; font-weight: 600; }
-.text-yellow { color: #ca8a04; font-weight: 600; }
-.result-preview {
-    font-family: monospace;
-    font-size: 0.85rem;
-    background: #f8fafc;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-width: 300px;
-}
-</style>
 {% endblock %}

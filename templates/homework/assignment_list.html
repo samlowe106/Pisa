@@ -3,14 +3,13 @@
 {% block title %}Assignments – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>Assignments</h1>
+<c-page-header title="Assignments">
     <p class="meta">{% if user.is_staff %}Manage all assignments.{% else %}Browse published Lean assignments and open problems to begin practicing.{% endif %}</p>
     {% if user.is_staff %}
     <a class="button" href="{% url 'homework:assignment_create' %}">Create assignment</a>
     {% endif %}
-</div>
-<div class="card">
+</c-page-header>
+<c-card>
     {% if assignments %}
     <table>
         <thead>
@@ -39,5 +38,5 @@
     {% else %}
     <p>No assignments{% if user.is_staff %} have been created{% else %} are published{% endif %} yet.</p>
     {% endif %}
-</div>
+</c-card>
 {% endblock %}

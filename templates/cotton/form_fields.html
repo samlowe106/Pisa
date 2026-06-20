@@ -1,0 +1,9 @@
+<c-vars exclude="" />
+{% for field in form %}{% if field.name != exclude %}
+<div class="field">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.help_text %}<p class="meta">{{ field.help_text }}</p>{% endif %}
+    {% for error in field.errors %}<p class="alert">{{ error }}</p>{% endfor %}
+</div>
+{% endif %}{% endfor %}

@@ -3,11 +3,10 @@
 {% block title %}Login – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>Login</h1>
+<c-page-header title="Login">
     <p class="meta">Sign in to access assignments and run Lean problems.</p>
-</div>
-<div class="card">
+</c-page-header>
+<c-card>
     <form method="post" action="{% url 'login' %}">
         {% csrf_token %}
         {% if form.errors %}
@@ -23,5 +22,5 @@
         </div>
         <button class="button" type="submit">Login</button>
     </form>
-</div>
+</c-card>
 {% endblock %}

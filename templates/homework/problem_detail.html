@@ -6,29 +6,231 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.css" integrity="sha512-uf06llspW44/LZpHzHT6qBOIVODjWtv4MxCricRxkzvopAlSWnTf6hpZTFxuuZcuNE9CBQhqE0Seu1CoRk84nQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.js" integrity="sha512-t5Lcu24FbQybGnoIbv1GXDx633tW0Hd4reBUx74EIq/2Q39FzskADNbjc605pQA9kkojC+8bRXhHKEXoKJs3rw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/mode/simple.min.js" integrity="sha512-zyHuw9jVNShJwz2OsCfv7qBhVZRFK0Ez7u/NalYSm517xi9hVyQ71/FrFEPlAPvfoAZ/jmDT3ILXI3rwCLx0iA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<style>
-    .CodeMirror {
-        border: 1px solid #d1d5db;
-        border-radius: 0.5rem;
-        min-height: 360px;
-    }
-    .fallback-message {
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        color: #991b1b;
-        padding: 0.75rem 1rem;
-        border-radius: 0.375rem;
-        margin-top: 1rem;
-    }
-</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/runmode/runmode.min.js" integrity="sha512-+6DVDL3K5+fmRHyC0UoO4m4vzqUo/S3x6PLn3xObP8X1mbmX8jYWHN+owqygDz4xv5MijHh48P9TJayxRGYYNw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
+    /**
+     * Lean LSP Client
+     * Connects to the WebSocket LSP proxy and sends/receives JSON-RPC 2.0 messages.
+     */
+    function setLeanStatus(text) {
+        const el = document.getElementById('lean-status');
+        if (el) el.textContent = text;
+    }
+
+    function setTabText(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+    }
+
+    class LeanLSPClient {
+        constructor(problemPk) {
+            this.ws = null;
+            this.messageId = 1;
+            this.version = 1;
+            this.initialized = false;
+            this.problemPk = problemPk;
+            // Canonical client-side document URI; the server maps this onto the assembled file.
+            this.docUri = 'file:///pisa/problem.lean';
+            this.pendingGoals = new Set(); // ids of in-flight $/lean/plainGoal requests
+        }
+
+        connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const url = `${protocol}://${window.location.host}/ws/lean-lsp/${this.problemPk}/`;
+
+            this.ws = new WebSocket(url);
+            this.ws.onopen = () => this.onOpen();
+            this.ws.onmessage = (event) => this.onMessage(event);
+            this.ws.onerror = (error) => {
+                console.warn('LSP WebSocket error:', error);
+                this.onError();
+            };
+            this.ws.onclose = () => {
+                console.info('LSP WebSocket closed');
+                this.initialized = false;
+                setLeanStatus('Live feedback off');
+            };
+        }
+
+        onOpen() {
+            setLeanStatus('Connecting…');
+            this.send({
+                jsonrpc: '2.0',
+                id: this.messageId++,
+                method: 'initialize',
+                params: {
+                    processId: null,
+                    rootUri: null,
+                    capabilities: {
+                        textDocument: {
+                            synchronization: { didChange: { incrementalSync: false } },
+                        },
+                    },
+                },
+            });
+        }
+
+        onMessage(event) {
+            let message;
+            try {
+                message = JSON.parse(event.data);
+            } catch (error) {
+                console.warn('LSP message parse error:', error, event.data);
+                return;
+            }
+
+            // Server-side status (e.g. live feedback unavailable for this problem).
+            if (message.pisa) {
+                console.info('Live feedback unavailable:', message.pisa.reason);
+                this.initialized = false;
+                setLeanStatus('Live feedback off');
+                return;
+            }
+            // Response to one of our $/lean/plainGoal requests.
+            if (message.id !== undefined && this.pendingGoals.has(message.id)) {
+                this.pendingGoals.delete(message.id);
+                this.onGoalResult(message.result);
+                return;
+            }
+            // initialize response -> handshake complete; open the document.
+            if (!message.method && message.result && message.result.capabilities) {
+                this.initialized = true;
+                this.send({ jsonrpc: '2.0', method: 'initialized', params: {} });
+                this.didOpen(leanEditor ? leanEditor.getValue() : '');
+                setLeanStatus('Live feedback on');
+                return;
+            }
+            if (message.method === 'textDocument/publishDiagnostics') {
+                this.onPublishDiagnostics(message.params);
+            }
+        }
+
+        onPublishDiagnostics(params) {
+            const diagnostics = params.diagnostics || [];
+            const format = (d) => {
+                const line = d.range?.start?.line ?? 0;
+                const col = d.range?.start?.character ?? 0;
+                return `L${line + 1}:${col + 1}  ${d.message}`;
+            };
+            const errors = diagnostics.filter((d) => d.severity === 1);
+            const others = diagnostics.filter((d) => d.severity !== 1);
+            setTabText('lean-errors', errors.length ? errors.map(format).join('\n\n') : 'No errors.');
+            setTabText('lean-messages', others.length ? others.map(format).join('\n\n') : 'No messages.');
+            setLeanStatus(errors.length ? `${errors.length} error${errors.length > 1 ? 's' : ''}` : 'No errors');
+            // Diagnostics settled — refresh the goal at the cursor.
+            this.requestGoals();
+        }
+
+        onGoalResult(result) {
+            const goals = (result && result.goals) || [];
+            setTabText('lean-goals', goals.length ? goals.join('\n\n') : 'No goals — proof complete! 🎉');
+        }
+
+        onError() {
+            setLeanStatus('Live feedback off');
+        }
+
+        send(message) {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify(message));
+            }
+        }
+
+        didOpen(content) {
+            this.version = 1;
+            this.send({
+                jsonrpc: '2.0',
+                method: 'textDocument/didOpen',
+                params: {
+                    textDocument: { uri: this.docUri, languageId: 'lean', version: this.version, text: content },
+                },
+            });
+            this.requestGoals();
+        }
+
+        didChange(content) {
+            if (!this.initialized) return;
+            this.version += 1;
+            this.send({
+                jsonrpc: '2.0',
+                method: 'textDocument/didChange',
+                params: {
+                    textDocument: { uri: this.docUri, version: this.version },
+                    contentChanges: [{ text: content }],
+                },
+            });
+        }
+
+        requestGoals() {
+            if (!this.initialized || !leanEditor) return;
+            const cursor = leanEditor.getCursor();
+            const id = this.messageId++;
+            this.pendingGoals.add(id);
+            this.send({
+                jsonrpc: '2.0',
+                id,
+                method: '$/lean/plainGoal',
+                params: {
+                    textDocument: { uri: this.docUri },
+                    position: { line: cursor.line, character: cursor.ch },
+                },
+            });
+        }
+    }
+
+    let lspClient;
+
+    function debounce(func, delay) {
+        let timeoutId;
+        return function (...args) {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+
     let leanEditor;
+    const editableEditors = new Map();
+    const readonlyEditors = new Map();
+
+    function createReadOnlyEditor(textarea) {
+        const editor = CodeMirror.fromTextArea(textarea, {
+            mode: 'lean',
+            theme: 'default',
+            lineNumbers: true,
+            matchBrackets: true,
+            indentUnit: 2,
+            indentWithTabs: false,
+            tabSize: 2,
+            viewportMargin: Infinity,
+            readOnly: 'nocursor',
+        });
+        const lineHeight = typeof editor.defaultTextHeight === 'function' ? editor.defaultTextHeight() : 20;
+        const height = Math.max(lineHeight * editor.lineCount() + 12, lineHeight * 3);
+        editor.setSize(null, height);
+        editor.getWrapperElement().classList.add('fixed-code-editor');
+        return editor;
+    }
+
+    function saveEditorValues() {
+        if (leanEditor) {
+            leanEditor.save();
+        }
+        editableEditors.forEach((editor) => editor.save());
+        readonlyEditors.forEach((editor) => editor.save());
+    }
 
     function showEditorFallback() {
         const fallback = document.getElementById('lean-editor-fallback');
         if (fallback) {
             fallback.hidden = false;
         }
+    }
+
+    function showDiagnostics(message, severity = 'error') {
+        const diagnostics = document.getElementById('lean-diagnostics');
+        diagnostics.textContent = message;
+        diagnostics.classList.remove('hidden', 'error', 'success', 'warning');
+        diagnostics.classList.add('fallback-message', severity);
     }
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -56,34 +258,163 @@
                 },
             });
 
-            const textarea = document.getElementById('lean-code');
-            leanEditor = CodeMirror.fromTextArea(textarea, {
-                mode: 'lean',
-                theme: 'default',
-                lineNumbers: true,
-                matchBrackets: true,
-                indentUnit: 2,
-                indentWithTabs: false,
-                autofocus: true,
-                tabSize: 2,
-                viewportMargin: Infinity,
+            document.querySelectorAll('#lean-code, .editable-code').forEach((textarea) => {
+                const editor = CodeMirror.fromTextArea(textarea, {
+                    mode: 'lean',
+                    theme: 'default',
+                    lineNumbers: true,
+                    matchBrackets: true,
+                    indentUnit: 2,
+                    indentWithTabs: false,
+                    autofocus: textarea.id === 'lean-code',
+                    tabSize: 2,
+                    viewportMargin: Infinity,
+                });
+
+                if (textarea.id === 'lean-code') {
+                    leanEditor = editor;
+
+                    // Live feedback is scoped to the single main editor: push edits to the LSP
+                    // (debounced) and refresh the goal at the cursor as it moves.
+                    editor.on('change', debounce(() => {
+                        if (lspClient && lspClient.initialized) {
+                            lspClient.didChange(editor.getValue());
+                        }
+                    }, 500));
+                    editor.on('cursorActivity', debounce(() => {
+                        if (lspClient && lspClient.initialized) {
+                            lspClient.requestGoals();
+                        }
+                    }, 250));
+                } else {
+                    editableEditors.set(textarea, editor);
+                }
             });
+
+            document.querySelectorAll('.read-only-code').forEach((textarea) => {
+                if (textarea.closest('.imported-source-file')?.classList.contains('collapsed')) {
+                    return;
+                }
+                const editor = createReadOnlyEditor(textarea);
+                readonlyEditors.set(textarea, editor);
+            });
+
+            // Initialize LSP client and connect (scoped to this problem).
+            lspClient = new LeanLSPClient(Number('{{ problem.pk }}'));
+            lspClient.connect();
         } catch (error) {
             console.warn('CodeMirror initialization failed:', error);
             showEditorFallback();
         }
+
+        initLeanTabs();
+        initImportedFileToggles();
     });
 
+
+    function initImportedFileToggles() {
+        document.querySelectorAll('.toggle-import').forEach((button) => {
+            const container = button.closest('.imported-source-file');
+            if (!container) return;
+            button.textContent = container.classList.contains('collapsed') ? 'Show' : 'Hide';
+            button.addEventListener('click', () => {
+                const container = button.closest('.imported-source-file');
+                if (!container) return;
+                const expanded = container.classList.toggle('collapsed') === false;
+                button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                button.textContent = expanded ? 'Hide' : 'Show';
+
+                if (expanded) {
+                    const textarea = container.querySelector('.read-only-code');
+                    if (!textarea) return;
+                    if (!readonlyEditors.has(textarea)) {
+                        const editor = createReadOnlyEditor(textarea);
+                        readonlyEditors.set(textarea, editor);
+                    } else {
+                        const editor = readonlyEditors.get(textarea);
+                        editor.refresh();
+                    }
+                }
+            });
+        });
+    }
+
+    function initLeanTabs() {
+        const buttons = Array.from(document.querySelectorAll('.lean-tab'));
+        const storedTab = window.localStorage.getItem('pisa-lean-active-tab');
+        const defaultTab = buttons.find((button) => button.dataset.target === storedTab) || buttons[0];
+
+        function activateTab(button) {
+            buttons.forEach((btn) => {
+                btn.classList.toggle('active', btn === button);
+                btn.setAttribute('aria-selected', btn === button ? 'true' : 'false');
+                btn.setAttribute('tabindex', btn === button ? '0' : '-1');
+            });
+
+            document.querySelectorAll('.lean-tab-panel').forEach((panel) => {
+                panel.classList.toggle('active', panel.id === button.dataset.target);
+            });
+
+            window.localStorage.setItem('pisa-lean-active-tab', button.dataset.target);
+            button.focus({ preventScroll: true });
+        }
+
+        buttons.forEach((button) => {
+            button.addEventListener('click', () => activateTab(button));
+            button.addEventListener('keydown', (event) => {
+                if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    const currentIndex = buttons.indexOf(event.currentTarget);
+                    const nextIndex = event.key === 'ArrowRight'
+                        ? (currentIndex + 1) % buttons.length
+                        : (currentIndex - 1 + buttons.length) % buttons.length;
+                    activateTab(buttons[nextIndex]);
+                }
+            });
+        });
+
+        if (defaultTab) {
+            activateTab(defaultTab);
+        }
+    }
+
+    function renderLeanFeedback(data) {
+        const goals = document.getElementById('lean-goals');
+        const messages = document.getElementById('lean-messages');
+        const errors = document.getElementById('lean-errors');
+
+        goals.textContent =
+            data.goals && data.goals.length ? data.goals.join('\n') : 'No goals produced.';
+        messages.textContent =
+            data.messages && data.messages.length ? data.messages.join('\n') : 'No messages produced.';
+        errors.textContent =
+            data.errors && data.errors.length ? data.errors.join('\n') : 'No errors produced.';
+
+        const diagnostics = document.getElementById('lean-diagnostics');
+        if (
+            (!data.goals || data.goals.length === 0) &&
+            (!data.messages || data.messages.length === 0) &&
+            (!data.errors || data.errors.length === 0)
+        ) {
+            const message = data.error || data.stderr || data.stdout || 'Lean ran with no errors :)';
+            const severity = data.error || data.stderr || data.returncode !== 0 ? 'error' : 'success';
+            showDiagnostics(message, severity);
+        } else {
+            diagnostics.classList.add('hidden');
+        }
+    }
+
     async function runLean() {
-        const code = leanEditor ? leanEditor.getValue() : document.getElementById('lean-code').value;
         const status = document.getElementById('lean-status');
         const diagnostics = document.getElementById('lean-diagnostics');
+        const form = document.getElementById('lean-form');
 
         status.textContent = 'Running';
         diagnostics.textContent = '';
+        diagnostics.classList.add('hidden');
 
-        const formData = new FormData();
-        formData.append('code', code);
+        saveEditorValues();
+        const formData = new FormData(form);
 
         const response = await fetch("{% url 'homework:problem_run' pk=problem.pk %}", {
             method: 'POST',
@@ -96,42 +427,31 @@
         if (!response.ok) {
             const msg = 'Unable to run Lean. Server returned ' + response.status;
             status.textContent = 'Error';
-            diagnostics.textContent = msg;
+            showDiagnostics(msg, 'error');
             return;
         }
 
         const data = await response.json();
         if (data.error) {
             status.textContent = 'Error';
-            diagnostics.textContent = data.error;
+            showDiagnostics(data.error, 'error');
             return;
         }
 
         status.textContent = data.returncode === 0 ? 'OK' : 'Failed (exit ' + data.returncode + ')';
-
-        const combined = (data.stderr || '') + '\n' + (data.stdout || '');
-        const lines = combined.split(/\r?\n/).filter(Boolean);
-        const important = lines.filter(l => /error|warning|\b!\b|\berror:/i.test(l));
-
-        if (important.length > 0) {
-            diagnostics.textContent = important.join('\n');
-        } else if (lines.length > 0) {
-            diagnostics.textContent = lines.slice(-20).join('\n');
-        } else {
-            diagnostics.textContent = data.returncode === 0 ? 'Lean ran with no errors :)' : 'No diagnostics produced.';
-        }
+        renderLeanFeedback(data);
     }
 
     async function submitSolution() {
-        const code = leanEditor ? leanEditor.getValue() : document.getElementById('lean-code').value;
         const status = document.getElementById('lean-status');
         const diagnostics = document.getElementById('lean-diagnostics');
+        const form = document.getElementById('lean-form');
 
         status.textContent = 'Submitting';
-        diagnostics.textContent = '';
+        diagnostics.classList.add('hidden');
 
-        const formData = new FormData();
-        formData.append('code', code);
+        saveEditorValues();
+        const formData = new FormData(form);
 
         const response = await fetch("{% url 'homework:problem_submit' pk=problem.pk %}", {
             method: 'POST',
@@ -144,51 +464,61 @@
         if (!response.ok) {
             const msg = 'Unable to submit. Server returned ' + response.status;
             status.textContent = 'Error';
-            diagnostics.textContent = msg;
+            showDiagnostics(msg, 'error');
             return;
         }
 
         const data = await response.json();
         if (data.error) {
             status.textContent = 'Error';
-            diagnostics.textContent = data.error;
+            showDiagnostics(data.error, 'error');
             return;
         }
 
-        status.textContent = data.status || 'Submitted';
-        diagnostics.textContent = data.result || 'Submission completed.';
+        if (data.status === 'passed') {
+            status.textContent = 'Submission received';
+            const score = data.score ?? 0;
+            const possiblePoints = data.possible_points ?? score;
+            showDiagnostics(
+                `Submission received (${score} / ${possiblePoints})`,
+                'success'
+            );
+        } else if (data.status === 'failed') {
+            status.textContent = 'Submission received';
+            const score = data.score ?? 0;
+            const possiblePoints = data.possible_points ?? score;
+            const severity = score > 0 ? 'warning' : 'error';
+            showDiagnostics(
+                `Submission received (${score} / ${possiblePoints})`,
+                severity
+            );
+        } else if (data.status === 'error') {
+            status.textContent = 'Error';
+            showDiagnostics(data.result || 'Submission error.', 'error');
+        } else if (data.goals || data.messages || data.errors) {
+            status.textContent = data.status || 'Submitted';
+            renderLeanFeedback(data);
+        } else {
+            status.textContent = data.status || 'Submitted';
+            showDiagnostics(data.result || 'Submission completed.', 'success');
+        }
     }
 </script>
 {% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>{{ problem.title }}</h1>
+<c-page-header>
+    <c-slot name="title">{{ problem.title }} <span class="meta">({{ problem.points }} point{% if problem.points != 1 %}s{% endif %})</span></c-slot>
     <p class="meta">Problem from {{ problem.assignment.title }}</p>
     {% if user.is_staff %}
     <a class="button secondary" href="{% url 'homework:problem_update' pk=problem.pk %}">Edit problem</a>
     {% endif %}
-</div>
-<div class="card">
-    <h2>Statement</h2>
+</c-page-header>
+<c-card heading="Statement">
     <p>{{ problem.statement|linebreaks }}</p>
-</div>
-<div class="card">
-    <h2>Problem Content</h2>
-    {% if source_files %}
-    <div class="field">
-        <label>Imported Lean source files</label>
-        {% for source_file in source_files %}
-        <div style="margin-bottom:1rem;">
-            <strong>{{ source_file.title }}</strong>
-            {% if user.is_staff %}
-            <span class="meta">({{ source_file.visible|yesno:"Visible,Hidden" }})</span>
-            {% endif %}
-            <pre class="mono" style="background: #f9f9f9; border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 1rem; font-size: 0.875rem; line-height: 1.5; overflow-x: auto;">{{ source_file.content }}</pre>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+</c-card>
+<c-card heading="Problem Content">
+    <c-source-files :source_files="source_files" />
     {% for block in problem.blocks.all %}
         {% if block.block_type == 'text' %}
         <div class="field">
@@ -197,25 +527,37 @@
         {% elif block.block_type == 'fixed_code' %}
         <div class="field">
             <label>Fixed code (read-only)</label>
-            <pre class="mono" style="background: #f9f9f9; border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 1rem; font-size: 0.875rem; line-height: 1.5; overflow-x: auto;">{{ block.content }}</pre>
+            <textarea class="read-only-code" readonly>{{ block.content }}</textarea>
         </div>
         {% endif %}
     {% endfor %}
-</div>
-<div class="card">
-    <div style="display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start;">
+</c-card>
+<c-card>
+    <div class="problem-layout">
         <div>
             <h2>Lean editor</h2>
             <form id="lean-form" onsubmit="event.preventDefault(); runLean();">
                 {% csrf_token %}
                 <div class="field">
+                    {% if editable_blocks|length == 1 %}
                     <label for="lean-code">Lean code</label>
-                    <textarea id="lean-code" name="code" class="mono">{% for block in problem.blocks.all %}{% if block.block_type == 'editable_code' %}{{ block.content }}{% endif %}{% endfor %}</textarea>
+                    <textarea id="lean-code" name="code" class="mono">{{ editable_blocks.0.content }}</textarea>
+                    {% elif editable_blocks|length > 1 %}
+                        {% for block in editable_blocks %}
+                        <div class="field">
+                            <label for="editable-code-{{ block.pk }}">Editable code block {{ forloop.counter }}</label>
+                            <textarea id="editable-code-{{ block.pk }}" name="editable_code_{{ block.pk }}" class="editable-code mono">{{ block.content }}</textarea>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                    <label for="lean-code">Lean code</label>
+                    <textarea id="lean-code" name="code" class="mono"></textarea>
+                    {% endif %}
                     <div id="lean-editor-fallback" class="fallback-message" hidden>
                         Code highlighting failed to load. The editor will still work as a plain textarea. Please refresh the page or check your browser console/network tab for blocked resources.
                     </div>
                 </div>
-                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                <div class="problem-actions">
                     <button class="button" type="submit">Run Lean</button>
                     <button class="button secondary" type="button" onclick="submitSolution();">Submit</button>
                 </div>
@@ -223,13 +565,21 @@
             <p class="meta">Lean is executed on the server and diagnostics are shown in the sidebar.</p>
         </div>
 
-        <aside style="min-width: 280px;">
-            <div class="card">
+        <aside class="problem-sidebar">
+            <c-card>
                 <h3>Lean Diagnostics</h3>
                 <div id="lean-status" class="meta">No run yet</div>
-                <div id="lean-diagnostics" style="margin-top: 0.5rem; max-height: 420px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 0.9rem; white-space: pre-wrap;"></div>
-            </div>
+                <div class="lean-tabs" role="tablist" aria-label="Lean feedback tabs">
+                    <button id="lean-goals-tab" type="button" class="lean-tab" role="tab" aria-controls="lean-goals" data-target="lean-goals">Goals</button>
+                    <button id="lean-messages-tab" type="button" class="lean-tab" role="tab" aria-controls="lean-messages" data-target="lean-messages">Messages</button>
+                    <button id="lean-errors-tab" type="button" class="lean-tab" role="tab" aria-controls="lean-errors" data-target="lean-errors">Errors</button>
+                </div>
+                <div id="lean-goals" class="lean-tab-panel" role="tabpanel" aria-labelledby="lean-goals-tab">No goals yet.</div>
+                <div id="lean-messages" class="lean-tab-panel" role="tabpanel" aria-labelledby="lean-messages-tab">No messages yet.</div>
+                <div id="lean-errors" class="lean-tab-panel" role="tabpanel" aria-labelledby="lean-errors-tab">No errors yet.</div>
+                <div id="lean-diagnostics" class="fallback-message hidden"></div>
+            </c-card>
         </aside>
     </div>
-</div>
+</c-card>
 {% endblock %}

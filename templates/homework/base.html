@@ -1,170 +1,34 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>{% block title %}Pisa Homework{% endblock %}</title>
-    <style>
-        body {
-            font-family: system-ui, sans-serif;
-            margin: 0;
-            padding: 0;
-            background: #f8fafc;
-            color: #111827;
-        }
 
-        body a {
-            color: #6b7280;
-            text-decoration: none;
-            transition: all 0.2s ease;
-        }
+    <link rel="stylesheet" href="{% static 'homework/css/base.css' %}">
 
-        body a:hover {
-            color: #111827;
-            text-decoration: underline;
-        }
+    {% if use_codemirror %}
 
-        header,
-        .page {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 1rem 1.5rem;
-        }
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.css"
+              integrity="sha512-uf06llspW44/LZpHzHT6qBOIVODjWtv4MxCricRxkzvopAlSWnTf6hpZTFxuuZcuNE9CBQhqE0Seu1CoRk84nQ=="
+              crossorigin="anonymous" referrerpolicy="no-referrer" />
 
-        header {
-            background: #111827;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-        }
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.js"
+                integrity="sha512-t5Lcu24FbQybGnoIbv1GXDx633tW0Hd4reBUx74EIq/2Q39FzskADNbjc605pQA9kkojC+8bRXhHKEXoKJs3rw=="
+                crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/mode/simple.min.js"
+                integrity="sha512-zyHuw9jVNShJwz2OsCfv7qBhVZRFK0Ez7u/NalYSm517xi9hVyQ71/FrFEPlAPvfoAZ/jmDT3ILXI3rwCLx0iA=="
+                crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/runmode/runmode.min.js"
+                integrity="sha512-+6DVDL3K5+fmRHyC0UoO4m4vzqUo/S3x6PLn3xObP8X1mbmX8jYWHN+owqygDz4xv5MijHh48P9TJayxRGYYNw=="
+                crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-        header a {
-            color: #d1d5db;
-            text-decoration: none;
-        }
+    {% endif %}
 
-        header a:hover {
-            color: white;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .hero {
-            padding: 1.5rem 0;
-        }
-
-        .card {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 0.75rem;
-            padding: 1.25rem;
-            box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
-        }
-
-        .card+.card {
-            margin-top: 1rem;
-        }
-
-        .button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.75rem 1rem;
-            border-radius: 0.6rem;
-            background: #2563eb;
-            color: white;
-            text-decoration: none;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .button.secondary {
-            background: #6b7280;
-        }
-
-        pre,
-        textarea {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-            font-size: 0.95rem;
-        }
-
-        textarea {
-            width: 100%;
-            border: 1px solid #d1d5db;
-            border-radius: 0.5rem;
-            padding: 0.85rem;
-            min-height: 280px;
-        }
-
-        .mono {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-        }
-
-        .field {
-            margin-bottom: 1rem;
-        }
-
-        .field label {
-            display: block;
-            margin-bottom: 0.35rem;
-            font-weight: 600;
-        }
-
-        .field input,
-        .field textarea {
-            width: 100%;
-        }
-
-        .alert {
-            padding: 1rem;
-            border-radius: 0.75rem;
-            background: #f8d7da;
-            color: #842029;
-            border: 1px solid #f5c2c7;
-            margin-top: 1rem;
-        }
-
-        .footer {
-            margin-top: 2rem;
-            padding: 1rem 0;
-            text-align: center;
-            color: #6b7280;
-        }
-
-        .footer a {
-            color: #6b7280;
-            text-decoration: none;
-            transition: all 0.2s ease;
-        }
-
-        .footer a:hover {
-            color: #111827;
-            text-decoration: underline;
-        }
-
-        .meta {
-            color: #4b5563;
-            font-size: 0.95rem;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            padding: 0.75rem 0.5rem;
-            border-bottom: 1px solid #e5e7eb;
-        }
-    </style>
     {% block extra_head %}{% endblock %}
 </head>
 
@@ -172,7 +36,7 @@
     <header>
         <div>
             <a href="{% url 'homework:dashboard' %}"><strong>Pisa</strong></a>
-            <span style="margin-left: 1rem; color:#9ca3af;">Lean homework platform</span>
+            <span class="brand-tagline">Lean homework platform</span>
         </div>
         <div class="nav-links">
             {% if user.is_authenticated %}
@@ -182,9 +46,9 @@
             {% if user.is_staff %}
             <a href="{% url 'homework:lean_source_file_list' %}">Lean files</a>
             {% endif %}
-            <form method="post" action="{% url 'logout' %}" style="display: inline;">
+            <form method="post" action="{% url 'logout' %}" class="logout-form">
                 {% csrf_token %}
-                <button type="submit" style="background: none; border: none; color: #d1d5db; text-decoration: underline; cursor: pointer; font: inherit;">Logout</button>
+                <button type="submit" class="link-button">Logout</button>
             </form>
             {% else %}
             <a href="{% url 'login' %}">Login</a>

@@ -3,22 +3,19 @@
 {% block title %}{{ assignment.title }} – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>{{ assignment.title }}</h1>
+<c-page-header :title="assignment.title">
     <p class="meta">Course: <a href="{% url 'homework:course_detail' slug=assignment.course.slug %}">{{ assignment.course.title }}</a></p>
     <p class="meta">{% if assignment.due_date %}Due {{ assignment.due_date|date:'M d, Y H:i' }}{% else %}No due date
         set{% endif %}</p>
     {% if user.is_staff %}
     <a class="button secondary" href="{% url 'homework:assignment_update' slug=assignment.slug %}">Edit assignment</a>
     {% endif %}
-</div>
-<div class="card">
-    <h2>Description</h2>
+</c-page-header>
+<c-card heading="Description">
     <p>{{ assignment.description|linebreaks }}</p>
-</div>
+</c-card>
 {% if source_files %}
-<div class="card">
-    <h2>Imported Lean source files</h2>
+<c-card heading="Lean source files used in this assignment:">
     <ul>
         {% for source_file in source_files %}
         <li>
@@ -26,19 +23,19 @@
             {% if user.is_staff %}
             <span class="meta">({{ source_file.visible|yesno:"Visible,Hidden" }})</span>
             {% endif %}
-            <pre class="mono" style="background:#f9f9f9;border:1px solid #d1d5db;border-radius:0.5rem;padding:1rem;overflow-x:auto;">{{ source_file.content }}</pre>
+            <pre class="code-block">{{ source_file.content }}</pre>
         </li>
         {% endfor %}
     </ul>
-</div>
+</c-card>
 {% endif %}
-<div class="card">
-    <h2>Problems</h2>
+<c-card heading="Problems">
     {% if assignment.problems.all %}
     <ol>
         {% for problem in assignment.problems.all %}
         <li>
             <a href="{% url 'homework:problem_detail' pk=problem.pk %}">{{ problem.title }}</a>
+            <span class="meta">({{ problem.points }} point{% if problem.points != 1 %}s{% endif %})</span>
         </li>
         {% endfor %}
     </ol>
@@ -48,5 +45,5 @@
     {% if user.is_staff %}
     <a class="button" href="{% url 'homework:problem_create' assignment_slug=assignment.slug %}">Add problem</a>
     {% endif %}
-</div>
+</c-card>
 {% endblock %}

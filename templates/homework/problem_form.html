@@ -3,29 +3,18 @@
 {% block title %}{% if object %}Edit{% else %}Add{% endif %} Problem – Pisa{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>{% if object %}Edit{% else %}Add{% endif %} problem{% if object %} for {{ object.assignment.title }}{% else %} to {{ assignment.title }}{% endif %}</h1>
-</div>
-<div class="card">
+<c-page-header>
+    <c-slot name="title">{% if object %}Edit{% else %}Add{% endif %} problem{% if object %} for {{ object.assignment.title }}{% else %} to {{ assignment.title }}{% endif %}</c-slot>
+</c-page-header>
+<c-card>
     <form method="post">
         {% csrf_token %}
-        {% for field in form %}
-        <div class="field">
-            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% if field.help_text %}
-            <p class="meta">{{ field.help_text }}</p>
-            {% endif %}
-            {% for error in field.errors %}
-            <p class="alert">{{ error }}</p>
-            {% endfor %}
-        </div>
-        {% endfor %}
+        <c-form-fields :form="form" />
 
         <h3>Content Blocks</h3>
         {{ block_formset.management_form }}
         {% for block_form in block_formset %}
-        <div class="card" style="margin-top: 1rem; margin-bottom: 1rem;">
+        <c-card class="card-spaced">
             <h4>Block {{ forloop.counter }}{% if block_form.instance.pk %} (ID: {{ block_form.instance.pk }}){% endif %}</h4>
             {% if block_formset.can_delete %}
             <div class="field">
@@ -33,24 +22,11 @@
                 <label for="{{ block_form.DELETE.id_for_label }}">Delete this block</label>
             </div>
             {% endif %}
-            {% for field in block_form %}
-            {% if field.name != 'DELETE' %}
-            <div class="field">
-                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.help_text %}
-                <p class="meta">{{ field.help_text }}</p>
-                {% endif %}
-                {% for error in field.errors %}
-                <p class="alert">{{ error }}</p>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% endfor %}
-        </div>
+            <c-form-fields :form="block_form" exclude="DELETE" />
+        </c-card>
         {% endfor %}
 
         <button class="button" type="submit">Save problem</button>
     </form>
-</div>
+</c-card>
 {% endblock %}

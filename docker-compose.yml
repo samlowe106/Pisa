@@ -12,6 +12,9 @@ services:
       - .:/app
     environment:
       PYTHONUNBUFFERED: "1"
+      # Container paths for Lean. These override the host paths that .env sets (mounted via
+      # the volume below); load_dotenv() does not overwrite already-set env vars, so these win.
       LEAN_EXECUTABLE: /root/.elan/bin/lean
+      LEAN_LSP_CMD: /root/.elan/bin/lean --server
     stdin_open: true
     tty: true

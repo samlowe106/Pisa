@@ -30,7 +30,17 @@ SECRET_KEY = os.environ["SECRET_KEY"]
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = bool(os.environ.get("DEBUG", False))
 
-ALLOWED_HOSTS: list[str] = []
+# Hosts/domains the site may be served on. Set ALLOWED_HOSTS (comma-separated) in the
+# environment for real deployments (e.g. Railway: your-app.up.railway.app). In DEBUG we
+# default to the usual local hosts so `docker compose up` works at localhost, 127.0.0.1,
+# or 0.0.0.0.
+ALLOWED_HOSTS: list[str] = [
+    host.strip()
+    for host in os.environ.get("ALLOWED_HOSTS", "").split(",")
+    if host.strip()
+]
+if DEBUG and not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]
 
 
 # Application definition
@@ -174,6 +184,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = "static/"
+# The project keeps its assets in a top-level static/ dir (not per-app), so it must be
+# registered explicitly for the finders to serve/collect it.
+STATICFILES_DIRS = [BASE_DIR / "static"]
+# Target for `collectstatic` in production (serve via WhiteNoise/CDN when DEBUG is off).
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

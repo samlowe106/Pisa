@@ -23,6 +23,11 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[dependency-groups]
+dev = [
+    "coverage[toml]>=7.0",
+]
+
 [tool.uv]
 package = false
 
@@ -32,3 +37,19 @@ module-root = ""
 [build-system]
 requires = ["uv_build>=0.11.9,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.coverage.run]
+branch = true
+source = ["homework", "pisa"]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "manage.py",
+    "pisa/asgi.py",
+    "pisa/wsgi.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+# No `fail_under` yet: the suite has 0 tests, so a coverage gate would fail CI.
+# Raise this once a baseline test suite exists.

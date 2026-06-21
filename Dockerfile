@@ -5,9 +5,14 @@
 # across runs. Source code is copied in the lighter stages below.
 FROM python:3.14-slim AS base
 
+# uv installs the locked deps into this venv. It lives outside /app so the docker-compose
+# `.:/app` volume mount can't shadow it; only-system stops uv from downloading a second
+# Python (it reuses the image's interpreter).
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/root/.elan/bin:/root/.local/bin:${PATH}"
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_PREFERENCE=only-system \
+    PATH="/opt/venv/bin:/root/.elan/bin:/root/.local/bin:${PATH}"
 
 # System packages. BuildKit cache mounts keep the apt archives warm across rebuilds;
 # removing docker-clean lets apt actually reuse them.
@@ -35,21 +40,20 @@ RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init
 WORKDIR /app
 
 # Install only the locked *dependencies* before copying source, so this layer caches
-# independently of application code. The project itself is not installed: `pisa` is an
-# application run via `manage.py` from /app, not a package to build (and its source isn't
-# present at this layer). The uv cache mount speeds re-resolves.
+# independently of application code. `--no-install-project` skips building the `pisa` app
+# itself (it's run via manage.py from /app, and its source isn't present at this layer);
+# `--no-dev` excludes the dev group. The uv cache mount speeds re-resolves.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    /root/.local/bin/uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
-    && /root/.local/bin/uv pip install --system -r /tmp/requirements.txt \
-    && rm -f /tmp/requirements.txt
+    uv sync --frozen --no-dev --no-install-project
 
 
 # --- test: base + dev tooling (coverage) + source. Built by CI (--target test). ---
 FROM base AS test
 
+# Add the dev dependency group (coverage) on top of the prod deps.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    /root/.local/bin/uv pip install --system 'coverage[toml]'
+    uv sync --frozen --no-install-project
 COPY . /app
 # Default command runs the suite under coverage; CI overrides to also emit reports.
 CMD ["coverage", "run", "manage.py", "test", "--verbosity=2"]

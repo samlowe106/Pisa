@@ -24,7 +24,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ca-certificates \
         build-essential \
         git \
-        unzip
+        unzip \
+        bubblewrap
 
 # uv (Python package manager) and the Lean toolchain (via elan).
 # elan-init is rustup-style: the unattended flag is `-y` (NOT `--yes`). With `--yes`
@@ -66,4 +67,6 @@ COPY . /app
 RUN chmod +x /app/scripts/entrypoint.sh
 
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Production default: serve over ASGI (WebSockets + HTTP) with daphne. The dev compose
+# overrides this with `runserver` for autoreload.
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "pisa.asgi:application"]

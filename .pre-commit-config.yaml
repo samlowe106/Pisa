@@ -18,6 +18,8 @@ repos:
       - id: debug-statements
       - id: end-of-file-fixer
       - id: name-tests-test
+        args: [--django]  # this project uses Django's test_*.py convention, not *_test.py
+        exclude: (^|/)tests/utils\.py$  # shared test helpers, not a test module itself
       - id: pretty-format-json
         args: [--autofix]
         files: \.json$
@@ -32,13 +34,13 @@ repos:
         args: [--fix]
 
   - repo: https://github.com/psf/black
-    rev: 26.3.1
+    rev: 26.5.1
     hooks:
       - id: black
         args: [--safe]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v1.20.2"
+    rev: "v2.1.0"
     hooks:
       - id: mypy
         args:

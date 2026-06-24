@@ -312,6 +312,10 @@ LEAN_SANDBOX_WRAPPER = shlex.split(
 # --- Logging ---------------------------------------------------------------------------
 # Everything goes to the console (captured by Docker / journald). Level via LOG_LEVEL.
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+# Negative-path views legitimately return 4xx in tests; django.request logs those at WARNING
+# (with a full traceback for PermissionDenied), which buries real failures in the test output.
+# Quiet it to ERROR under the test runner — genuine 5xx server errors still surface.
+REQUEST_LOG_LEVEL = "ERROR" if "test" in sys.argv else "WARNING"
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -327,10 +331,10 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
     "loggers": {
         "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
-        # Surfaces 5xx tracebacks (and 4xx at DEBUG) without the rest of django at DEBUG.
+        # 5xx tracebacks stay visible; 4xx warnings are quieted under the test runner.
         "django.request": {
             "handlers": ["console"],
-            "level": "WARNING",
+            "level": REQUEST_LOG_LEVEL,
             "propagate": False,
         },
         "apps.homework": {

@@ -21,13 +21,15 @@ dependencies = [
     "django-csp>=4.0",
     "openpyxl>=3.1.5",
     "pillow>=12.2.0",
-    "pre-commit>=4.6.0",
     "python-dotenv>=1.2.2",
+    "sentry-sdk[django]>=2.63.0",
+    "whitenoise>=6.12.0",
 ]
 
 [dependency-groups]
 dev = [
     "coverage[toml]>=7.0",
+    "pre-commit>=4.6.0",
 ]
 
 [tool.uv]
@@ -42,7 +44,7 @@ build-backend = "uv_build"
 
 [tool.coverage.run]
 branch = true
-source = ["homework", "pisa"]
+source = ["apps", "pisa"]
 omit = [
     "*/migrations/*",
     "*/tests/*",

@@ -6,6 +6,10 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     ports:
       - "8000:8000"
+    # Lets the default bubblewrap Lean sandbox use unprivileged user namespaces (see the prod
+    # compose for the rationale).
+    security_opt:
+      - seccomp:unconfined
     volumes:
       - .:/app
     environment:

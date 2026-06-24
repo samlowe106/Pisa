@@ -1,0 +1,18 @@
+# Reverse proxy + automatic HTTPS for a self-hosted Pisa.
+#
+# Caddy obtains and renews a Let's Encrypt certificate for $PISA_DOMAIN automatically (the
+# domain's DNS must point at this host, with ports 80 and 443 reachable). It transparently
+# proxies HTTP and the Lean WebSocket (/ws/...) to the app, and serves user uploads straight
+# from disk.
+{$PISA_DOMAIN} {
+	encode zstd gzip
+
+	# User-uploaded media (course thumbnails, etc.) is served directly from the shared volume.
+	handle_path /media/* {
+		root * /srv/media
+		file_server
+	}
+
+	# Everything else — pages, static assets (via WhiteNoise), and WebSockets — goes to the app.
+	reverse_proxy web:8000
+}

@@ -173,3 +173,9 @@ cython_debug/
 # node stuff and javascript
 node_modules
 .prettierrc
+
+# User uploads (course thumbnails, etc.)
+media/
+
+# collectstatic output (regenerated on deploy)
+staticfiles/

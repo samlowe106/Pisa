@@ -128,3 +128,37 @@ class ProblemFormTests(TestCase):
 
     def test_minimal_problem_is_valid(self):
         self.assertTrue(ProblemForm(data={"points": 1, "order": 0}).is_valid())
+
+
+class CourseFormThumbnailAndDedupTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user("admin2", is_staff=True)
+        self.alice = User.objects.create_user("alice2", email="alice2@example.com")
+
+    def test_duplicate_email_in_a_roster_is_collapsed(self):
+        form = CourseForm(
+            data=_course_data(students="alice2@example.com, alice2@example.com"),
+            user=self.admin,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["students"], [self.alice])  # deduped
+
+    def test_upload_clears_a_chosen_preset(self):
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        buffer = BytesIO()
+        Image.new("RGB", (1, 1)).save(buffer, "PNG")
+        upload = SimpleUploadedFile(
+            "t.png", buffer.getvalue(), content_type="image/png"
+        )
+
+        form = CourseForm(
+            data=_course_data(thumbnail_preset="aurora.svg"),
+            files={"thumbnail": upload},
+            user=self.admin,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["thumbnail_preset"], "")  # upload wins

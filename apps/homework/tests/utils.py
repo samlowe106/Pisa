@@ -1,6 +1,7 @@
 """Shared test helpers: skip decorators for env-dependent tests, and a role-matrix fixture."""
 
 import shutil
+import subprocess
 import unittest
 
 from django.contrib.auth import get_user_model
@@ -19,12 +20,31 @@ def _lean_available():
         return False
 
 
+def _bwrap_can_sandbox():
+    """Whether bubblewrap can actually *create* a sandbox here — not just whether the binary is
+    installed. Inside a container without the right capabilities bwrap is present but fails at
+    ``mount`` ("Failed to make / slave"), so a binary-only check would let the Layer 2 tests run
+    and fail. We probe with the same namespace/bind setup the real wrapper uses."""
+    exe = shutil.which("bwrap")
+    if not exe:
+        return False
+    try:
+        probe = subprocess.run(
+            [exe, "--unshare-all", "--ro-bind", "/", "/", "--proc", "/proc", "true"],
+            capture_output=True,
+            timeout=15,
+        )
+        return probe.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 # Real-Lean tests run in CI's Docker image (Lean baked in) and skip elsewhere.
 requires_lean = unittest.skipUnless(_lean_available(), "Lean executable not available")
 
-# bubblewrap (Layer 2) sandbox-isolation tests.
+# Layer 2 sandbox-isolation tests need a bubblewrap that can really build a sandbox here.
 requires_bwrap = unittest.skipUnless(
-    shutil.which("bwrap"), "bubblewrap (bwrap) not available"
+    _bwrap_can_sandbox(), "bubblewrap cannot create a sandbox in this environment"
 )
 
 

@@ -1,13 +1,28 @@
 # Test plan
 
 A prioritized, living checklist. CI ([.github/workflows/tests.yml](.github/workflows/tests.yml))
-already runs `manage.py test` under coverage in the Docker image (Lean toolchain baked in), so
-new tests run automatically. **160 tests landed** across
-[apps/homework/tests/](apps/homework/tests/): `test_stats.py` (18), `test_sandbox.py` (13),
-`test_permissions.py` (11), `test_grading.py` (22), `test_consumer.py` (7), `test_models.py`
-(24), `test_grades_logic.py` (17), `test_forms.py` (13), `test_views.py` (20), `test_ops.py`
-(15). All three phases below are essentially complete; remaining unticked items are noted
-inline as lower-value follow-ups.
+runs `manage.py test` under coverage in the Docker image (Lean toolchain baked in), so new tests
+run automatically. **224 tests landed** across [apps/homework/tests/](apps/homework/tests/)
+(stats, sandbox, permissions, grading, consumer, models, grades-logic, forms, views,
+problem-views, lean-lsp, management, ops). All three phases below are essentially complete;
+remaining unticked items are noted inline as lower-value follow-ups.
+
+**Line coverage ≈ 91%** (`coverage report`, branch mode). At 100%: `lean_policy`, `stats`,
+`forms`, `exports`, `context_processors`, `lean_lsp`, `views/grades`, `views/mixins`,
+`views/lean_source_files`, `create_test_data`, `admin`, `health`. The notable remainders are
+`consumers.py` (59% — the LSP message-rewrite flow; the security-critical cap/access paths *are*
+covered) and `sandbox.py` (57% — the rlimit `preexec_fn` body runs post-`fork()` so coverage
+can't trace it, though `test_sandbox.py` verifies it via the child's own `getrlimit`).
+
+### CI environment notes (learned the hard way)
+- **`SECURE_SSL_REDIRECT`**: CI runs with `DEBUG` off, which turns on the HTTP→HTTPS 301 redirect;
+  the test client always speaks plain HTTP, so every client request 301'd. [settings.py](pisa/settings.py)
+  now disables it under the test runner (alongside the static-manifest fallback).
+- **bubblewrap**: `@requires_bwrap` ([tests/utils.py](apps/homework/tests/utils.py)) probes that
+  bwrap can actually *create* a sandbox (not just that the binary exists) — inside a container
+  without the mount caps it fails at `mount`, so the Layer 2 tests now skip there instead of
+  failing. Real-Lean *logic* tests run Layer-1-only (`LEAN_SANDBOX_WRAPPER=[]`) so they don't
+  depend on bwrap; the full-sandbox smoke test is gated on the probe.
 
 Priority order is **security & permissions first** (Phase 1), then core logic (Phase 2), then
 integration/ops (Phase 3). Tick items as they land.

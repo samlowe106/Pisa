@@ -10,7 +10,13 @@ import openpyxl
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.homework.models import Course, LeanSourceFile, Problem, Submission
+from apps.homework.models import (
+    Assignment,
+    Course,
+    LeanSourceFile,
+    Problem,
+    Submission,
+)
 
 from .utils import make_role_matrix
 
@@ -226,6 +232,13 @@ class ProblemReorderTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_malformed_json_is_rejected(self):
+        self.client.force_login(self.m["instructor"])
+        response = self.client.post(
+            self.url, data="not json at all", content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+
 
 class LeanSourceFileViewTests(TestCase):
     def setUp(self):
@@ -256,3 +269,210 @@ class LeanSourceFileViewTests(TestCase):
         # A different instructor (here: the admin) can't edit someone else's file.
         self.client.force_login(self.m["admin"])
         self.assertEqual(self.client.get(url).status_code, 404)
+
+
+class GradesViewTests(TestCase):
+    def setUp(self):
+        self.m = make_role_matrix()
+        Submission.objects.create(
+            problem=self.m["problem"],
+            user=self.m["student"],
+            code="x",
+            status=Submission.STATUS_PASSED,
+        )
+
+    def test_student_sees_their_own_grades_page(self):
+        self.client.force_login(self.m["student"])
+        response = self.client.get(reverse("homework:grades"))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["is_staff_view"])
+
+    def test_course_staff_get_a_staff_view(self):
+        self.client.force_login(self.m["instructor"])
+        response = self.client.get(reverse("homework:grades"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["is_staff_view"])
+
+    def test_admin_sees_all_grades(self):
+        self.client.force_login(self.m["admin"])
+        response = self.client.get(reverse("homework:grades"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["is_staff_view"])
+
+
+class AssignmentListAndDetailTests(TestCase):
+    def setUp(self):
+        self.m = make_role_matrix()
+
+    def test_student_sees_the_assignment_index(self):
+        self.client.force_login(self.m["student"])
+        self.assertEqual(
+            self.client.get(reverse("homework:assignment_list")).status_code, 200
+        )
+
+    def test_non_student_is_redirected_off_the_index(self):
+        self.client.force_login(self.m["instructor"])  # teaches, enrolled nowhere
+        response = self.client.get(reverse("homework:assignment_list"))
+        self.assertRedirects(response, reverse("homework:course_list"))
+
+    def test_staff_assignment_detail_lists_all_source_files(self):
+        self.client.force_login(self.m["instructor"])
+        self.assertEqual(self.client.get("/courses/test-course/hw1/").status_code, 200)
+
+
+def _assignment_post(course, slug="hw2", problems_total=0, **problem0):
+    data = {
+        "course": course.pk,
+        "title": "HW2",
+        "slug": slug,
+        "description": "",
+        "is_published": "on",
+        "problems-TOTAL_FORMS": str(problems_total),
+        "problems-INITIAL_FORMS": "0",
+        "problems-MIN_NUM_FORMS": "0",
+        "problems-MAX_NUM_FORMS": "1000",
+    }
+    for key, value in problem0.items():
+        data[f"problems-0-{key}"] = value
+    return data
+
+
+class AssignmentCreateUpdateTests(TestCase):
+    def setUp(self):
+        self.m = make_role_matrix()
+        self.create_url = reverse(
+            "homework:assignment_create_for_course",
+            kwargs={"course_slug": "test-course"},
+        )
+
+    def test_create_assignment_with_empty_formset(self):
+        self.client.force_login(self.m["instructor"])
+        response = self.client.post(self.create_url, _assignment_post(self.m["course"]))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            Assignment.objects.filter(course=self.m["course"], slug="hw2").exists()
+        )
+
+    def test_invalid_problem_formset_rerenders_without_saving(self):
+        self.client.force_login(self.m["instructor"])
+        response = self.client.post(
+            self.create_url,
+            _assignment_post(
+                self.m["course"], slug="hw3", problems_total=1, points="not-a-number"
+            ),
+        )
+        self.assertEqual(response.status_code, 200)  # form_invalid re-render
+        self.assertFalse(Assignment.objects.filter(slug="hw3").exists())
+
+    def test_update_assignment_redirects_to_detail(self):
+        self.client.force_login(self.m["instructor"])
+        url = reverse(
+            "homework:assignment_update",
+            kwargs={"course_slug": "test-course", "assignment_slug": "hw1"},
+        )
+        self.assertEqual(self.client.get(url).status_code, 200)
+        problem = self.m["problem"]
+        data = {
+            "course": self.m["course"].pk,
+            "title": "HW1 edited",
+            "slug": "hw1",
+            "description": "",
+            "is_published": "on",
+            "problems-TOTAL_FORMS": "1",
+            "problems-INITIAL_FORMS": "1",
+            "problems-MIN_NUM_FORMS": "0",
+            "problems-MAX_NUM_FORMS": "1000",
+            "problems-0-id": str(problem.pk),
+            "problems-0-title": "P1",
+            "problems-0-statement": "",
+            "problems-0-required_code": "",
+            "problems-0-grading_stub": "",
+            "problems-0-points": "1",
+            "problems-0-order": "0",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.m["assignment"].refresh_from_db()
+        self.assertEqual(self.m["assignment"].title, "HW1 edited")
+
+
+class LeanSourceFileCreateTests(TestCase):
+    def setUp(self):
+        self.m = make_role_matrix()
+
+    def test_create_sets_the_owner(self):
+        self.client.force_login(self.m["instructor"])
+        response = self.client.post(
+            reverse("homework:lean_source_file_create"),
+            {"title": "Prelude", "slug": "prelude", "content": "-- lib"},
+        )
+        self.assertEqual(response.status_code, 302)
+        source = LeanSourceFile.objects.get(slug="prelude")
+        self.assertEqual(source.created_by, self.m["instructor"])
+
+
+class CourseDetailStatsAndMemberTests(TestCase):
+    def setUp(self):
+        self.m = make_role_matrix()
+
+    def test_section_comparison_renders_when_requested(self):
+        # A submission so the staff stats block populates its submitter/earned tallies.
+        Submission.objects.create(
+            problem=self.m["problem"],
+            user=self.m["student"],
+            code="x",
+            status=Submission.STATUS_PASSED,
+        )
+        sibling = Course.objects.create(
+            title="Test Course", slug="test-course-2", renewed_from=self.m["course"]
+        )
+        sibling.instructors.add(self.m["instructor"])
+        self.client.force_login(self.m["instructor"])
+        url = reverse("homework:course_detail", kwargs={"slug": "test-course"})
+        response = self.client.get(url, {"cmp": sibling.slug})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["compare_active"], sibling.slug)
+
+    def test_add_member_unknown_role_is_bad_request(self):
+        self.client.force_login(self.m["instructor"])
+        url = reverse("homework:course_add_member", kwargs={"slug": "test-course"})
+        self.assertEqual(
+            self.client.post(url, {"role": "wizard", "identifier": "x"}).status_code,
+            400,
+        )
+
+    def test_add_member_unknown_user_redirects_with_error(self):
+        self.client.force_login(self.m["instructor"])
+        url = reverse("homework:course_add_member", kwargs={"slug": "test-course"})
+        response = self.client.post(url, {"role": "student", "identifier": "ghost"})
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn(  # nothing added
+            "ghost", self.m["course"].students.values_list("username", flat=True)
+        )
+
+    def test_remove_member_unknown_role_is_bad_request(self):
+        self.client.force_login(self.m["instructor"])
+        url = reverse("homework:course_remove_member", kwargs={"slug": "test-course"})
+        self.assertEqual(
+            self.client.post(
+                url, {"role": "wizard", "user_id": self.m["student"].pk}
+            ).status_code,
+            400,
+        )
+
+    def test_ta_cannot_remove_an_instructor(self):
+        self.client.force_login(self.m["ta"])
+        url = reverse("homework:course_remove_member", kwargs={"slug": "test-course"})
+        response = self.client.post(
+            url, {"role": "instructor", "user_id": self.m["instructor"].pk}
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_renew_with_blank_term_and_section_rerenders(self):
+        self.client.force_login(self.m["instructor"])
+        url = reverse("homework:course_renew", kwargs={"slug": "test-course"})
+        response = self.client.post(url, {"term": "", "section": ""})
+        self.assertEqual(response.status_code, 200)  # invalid form re-render
+        self.assertEqual(
+            Course.objects.filter(renewed_from=self.m["course"]).count(), 0
+        )

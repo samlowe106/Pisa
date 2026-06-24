@@ -234,12 +234,16 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
     },
 }
-# Tests don't run collectstatic, so the manifest backend would raise on every {% static %}.
-# Fall back to plain static storage when running the test suite.
+# Test-runner adjustments. CI runs the suite with DEBUG off (only SECRET_KEY is set), which
+# turns on the production hardening below — but two of those settings break the test client:
+#   * the manifest static storage needs a collectstatic manifest the tests never build, and
+#   * SECURE_SSL_REDIRECT 301-redirects every request (the test client always speaks plain HTTP).
+# Neutralise both only while the test runner is active.
 if "test" in sys.argv:
     STORAGES["staticfiles"][
         "BACKEND"
     ] = "django.contrib.staticfiles.storage.StaticFilesStorage"
+    SECURE_SSL_REDIRECT = False
 
 # User uploads (e.g. course thumbnails). Served from the same origin, so the CSP `img-src`
 # 'self' already covers them; in production serve /media/ via the web server.

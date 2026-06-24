@@ -37,6 +37,16 @@ class SandboxMechanicsTests(SimpleTestCase):
         self.assertNotIn("MY_API_TOKEN", env)
         self.assertIn("PATH", env)
 
+    @override_settings(LEAN_SANDBOX_ALLOW_ENV=["PATH"])
+    def test_allowlist_mode_keeps_only_listed_vars(self):
+        os.environ["PISA_EXTRA_VAR"] = "x"
+        try:
+            env = sandbox.sandbox_env()
+        finally:
+            del os.environ["PISA_EXTRA_VAR"]
+        self.assertNotIn("PISA_EXTRA_VAR", env)  # not on the allowlist
+        self.assertEqual(set(env) - {"PATH"}, set())  # nothing beyond the allowlist
+
     def test_popen_kwargs_shape(self):
         kwargs = sandbox.popen_kwargs(cpu_seconds=5)
         self.assertTrue(kwargs["start_new_session"])
@@ -184,9 +194,11 @@ class SandboxResourceLimitTests(SimpleTestCase):
 
 
 @requires_lean
+@requires_bwrap
 class SandboxLeanSmokeTest(SimpleTestCase):
     def test_real_proof_compiles_inside_sandbox(self):
-        # Guards that the env-strip + read-only-FS sandbox doesn't break the elan toolchain.
+        # Guards that the full default sandbox (bubblewrap + env-strip + read-only FS) doesn't
+        # break the elan toolchain. Needs a bwrap that can actually sandbox here.
         from apps.homework.views.problems import run_lean_process
 
         with override_settings(LEAN_TIMEOUT=120):
@@ -195,9 +207,11 @@ class SandboxLeanSmokeTest(SimpleTestCase):
 
 
 @requires_lean
+@override_settings(LEAN_SANDBOX_WRAPPER=[])  # Layer 1 only: these don't depend on bwrap
 class SandboxAdversarialLeanTests(SimpleTestCase):
-    """Real untrusted Lean against the full sandbox: a non-terminating program is killed, and
-    secrets never reach the child's environment."""
+    """Real untrusted Lean against the Layer 1 controls (no bubblewrap needed): a non-terminating
+    program is killed by the wall-clock timeout, and secrets never reach the child's environment.
+    Network / filesystem isolation (Layer 2) is covered by SandboxIsolationTests."""
 
     def test_runaway_evaluation_times_out_and_returns(self):
         from apps.homework.views.problems import run_lean_process

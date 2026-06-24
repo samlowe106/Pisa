@@ -128,3 +128,52 @@ class CompareHelperTests(SimpleTestCase):
         )
         self.assertTrue(result.comparable)
         self.assertLess(result.chi2.pvalue, 0.05)
+
+
+class EdgeCaseTests(SimpleTestCase):
+    """The defensive guards: degenerate inputs return nan/0.0, unsupported options raise."""
+
+    def test_sample_var_of_singleton_is_zero(self):
+        self.assertEqual(stats._sample_var([5.0], 5.0), 0.0)
+
+    def test_welch_t_constant_groups(self):
+        self.assertEqual(
+            stats._welch_t([1.0, 1.0], [1.0, 1.0]), 0.0
+        )  # equal & constant
+        self.assertEqual(stats._welch_t([2.0, 2.0], [1.0, 1.0]), math.inf)
+        self.assertEqual(stats._welch_t([1.0, 1.0], [2.0, 2.0]), -math.inf)
+
+    def test_ttest_equal_var_not_implemented(self):
+        with self.assertRaises(NotImplementedError):
+            stats.ttest_ind([1, 2, 3], [4, 5, 6], equal_var=True)
+
+    def test_chi2_statistic_of_empty_table_is_zero(self):
+        self.assertEqual(stats.chi2_statistic([[0, 0], [0, 0]]), 0.0)
+
+    def test_chi2_contingency_requires_two_rows(self):
+        with self.assertRaises(NotImplementedError):
+            stats.chi2_contingency([[1, 2], [3, 4], [5, 6]])
+
+    def test_false_discovery_control_only_bh(self):
+        with self.assertRaises(NotImplementedError):
+            stats.false_discovery_control([0.1, 0.2], method="by")
+
+    def test_cohens_d_degenerate(self):
+        self.assertTrue(math.isnan(stats.cohens_d([1.0], [2.0, 3.0])))  # group < 2
+        self.assertEqual(stats.cohens_d([1.0, 1.0], [2.0, 2.0]), 0.0)  # zero pooled var
+
+    def test_cramers_v_degenerate(self):
+        self.assertTrue(math.isnan(stats.cramers_v([[0, 0], [0, 0]])))  # n == 0
+        self.assertEqual(stats.cramers_v([[1], [2]]), 0.0)  # single column -> k < 2
+
+    def test_compare_letters_with_an_empty_section(self):
+        result = stats.compare_letters([0, 0, 0, 0, 0], [1, 2, 0, 0, 0])
+        self.assertEqual(result.n_a, 0)
+        self.assertIsNone(result.chi2)
+        self.assertFalse(result.comparable)
+
+    def test_compare_scores_with_too_few_observations(self):
+        result = stats.compare_scores([5.0], [1.0, 2.0, 3.0])
+        self.assertIsNone(result.welch)
+        self.assertFalse(result.comparable)
+        self.assertEqual(result.mean_a, 5.0)

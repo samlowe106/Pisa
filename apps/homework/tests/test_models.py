@@ -273,3 +273,61 @@ class VisibilityHelperTests(TestCase):
     def test_is_student_anywhere(self):
         self.assertTrue(is_student_anywhere(self.m["student"]))
         self.assertFalse(is_student_anywhere(self.m["outsider"]))
+
+
+class StrAndHelperCoverageTests(TestCase):
+    """`__str__`, role labels, thumbnail resolution, and the small standalone helpers."""
+
+    def setUp(self):
+        self.m = make_role_matrix()
+
+    def test_dunder_str_of_each_model(self):
+        self.assertEqual(str(self.m["course"]), "Test Course")
+        self.assertIn("HW1", str(self.m["assignment"]))
+        self.assertIn("P1", str(self.m["problem"]))
+        block = self.m["problem"].blocks.first()
+        self.assertIn("#", str(block))
+        source = LeanSourceFile.objects.create(
+            title="Lib", slug="lib", created_by=self.m["instructor"]
+        )
+        self.assertEqual(str(source), "Lib")
+        submission = Submission.objects.create(
+            problem=self.m["problem"], user=self.m["student"], code="x"
+        )
+        self.assertIn("t_student", str(submission))
+
+    def test_role_of_each_role(self):
+        course = self.m["course"]
+        self.assertEqual(course.role_of(self.m["admin"]), "admin")
+        self.assertEqual(course.role_of(self.m["instructor"]), "instructor")
+        self.assertEqual(course.role_of(self.m["ta"]), "ta")
+        self.assertEqual(course.role_of(self.m["student"]), "student")
+        self.assertIsNone(course.role_of(self.m["outsider"]))
+
+    def test_thumbnail_url_prefers_upload_then_preset_then_blank(self):
+        self.assertIn("x.png", Course(thumbnail="x.png").thumbnail_url)
+        self.assertIn("aurora.svg", Course(thumbnail_preset="aurora.svg").thumbnail_url)
+        self.assertEqual(Course().thumbnail_url, "")
+
+    def test_thumbnail_credit(self):
+        self.assertIsNone(Course().thumbnail_credit)  # nothing chosen
+        self.assertIsNone(
+            Course(thumbnail="x.png").thumbnail_credit
+        )  # upload, no credit
+        credit = Course(thumbnail_preset="aurora.svg").thumbnail_credit
+        self.assertIsInstance(credit, dict)  # from the aurora.json sidecar
+
+    def test_position_falls_back_to_one_for_a_detached_problem(self):
+        self.assertEqual(Problem(assignment=self.m["assignment"]).position, 1)
+
+    def test_unique_course_slug_suffixes_on_collision(self):
+        from apps.homework.models import _unique_course_slug
+
+        self.assertEqual(_unique_course_slug("Test Course"), "test-course-2")
+
+    def test_available_thumbnail_presets_lists_the_static_files(self):
+        from apps.homework.models import available_thumbnail_presets
+
+        presets = available_thumbnail_presets()
+        self.assertTrue(presets)
+        self.assertIn("key", presets[0])

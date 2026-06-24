@@ -10,7 +10,7 @@ Two enforcement layers are exercised:
 Most tests need neither Lean nor a DB; the backstop tests use real Lean (skip otherwise).
 """
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.homework import lean_policy
 from apps.homework.models import Problem, ProblemBlock, Submission
@@ -162,6 +162,18 @@ class AssembleSubmissionSourceTests(TestCase):
         self.assertIsNotNone(error)
         self.assertIn("Missing submission", error)
 
+    def test_problem_without_editable_blocks_uses_raw_code(self):
+        # No editable blocks at all -> the posted "code" field is taken as the whole document.
+        problem = Problem.objects.create(
+            assignment=self.m["assignment"], title="Plain", points=1
+        )
+        full, student, error = assemble_lean_submission_source(
+            problem, {"code": "theorem plain : True := trivial"}
+        )
+        self.assertIsNone(error)
+        self.assertEqual(full, student)
+        self.assertIn("theorem plain", full)
+
 
 class GradePreScanTests(TestCase):
     """``grade_lean_submission`` gates that fire *before* Lean runs — no Lean needed."""
@@ -207,10 +219,25 @@ class GradePreScanTests(TestCase):
         _status, message = grade_lean_submission(problem, full, student)
         self.assertNotIn(SCAN_REJECTION, message)
 
+    @override_settings(
+        LEAN_EXECUTABLE="/nonexistent/lean-binary", LEAN_SANDBOX_WRAPPER=[]
+    )
+    def test_missing_lean_executable_reports_error_status(self):
+        problem = self._problem()
+        code = "theorem t : True := trivial"
+        status, message = grade_lean_submission(problem, code, code)
+        self.assertEqual(status, Submission.STATUS_ERROR)
+        self.assertIn("Lean executable not found", message)
+
 
 @requires_lean
+@override_settings(
+    LEAN_SANDBOX_WRAPPER=[]
+)  # Layer 1 only: the grading logic doesn't need bwrap
 class GradeWithRealLeanTests(TestCase):
-    """The un-evadable backstop: a real compile + ``#print axioms`` audit."""
+    """The un-evadable backstop: a real compile + ``#print axioms`` audit. Runs Lean under the
+    Layer 1 sandbox so it exercises grading wherever Lean exists (bwrap isolation is tested in
+    test_sandbox.py)."""
 
     def setUp(self):
         self.m = make_role_matrix()

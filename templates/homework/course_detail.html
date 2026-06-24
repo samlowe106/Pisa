@@ -1,54 +1,377 @@
 {% extends 'homework/base.html' %}
+{% load static %}
 
-{% block title %}{{ course.title }} – Pisa{% endblock %}
+{% block title %}{{ course.display_name }} – Pisa{% endblock %}
+
+{% block extra_head %}
+<script src="{% static 'homework/js/tabs.js' %}" defer></script>
+<script src="{% static 'homework/js/disclosure.js' %}" defer></script>
+<script src="{% static 'homework/js/confirm-remove.js' %}" defer></script>
+{% if is_course_staff %}
+<script src="{% static 'homework/js/course-grades.js' %}" defer></script>
+{% endif %}
+{% endblock %}
 
 {% block content %}
-<c-page-header :title="course.title">
-    <p class="meta">Taught by {{ course.instructor.get_full_name|default:course.instructor.username }}</p>
-    {% if user.is_staff %}
-    <a class="button secondary" href="{% url 'homework:course_update' slug=course.slug %}">Edit course</a>
-    {% endif %}
-</c-page-header>
-<c-card heading="Description">
-    <p>{{ course.description|linebreaks }}</p>
-</c-card>
-<c-card heading="Students">
-    {% if course.students.all %}
-    <ul>
-        {% for student in course.students.all %}
-        <li>{{ student.get_full_name|default:student.username }}</li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <p>No students enrolled yet.</p>
-    {% endif %}
-</c-card>
-<c-card heading="Assignments">
-    {% if assignments %}
-    <ul>
-        {% for assignment in assignments %}
-        <li><a href="{% url 'homework:assignment_detail' slug=assignment.slug %}">{{ assignment.title }}</a></li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <p>No assignments have been added to this course yet.</p>
-    {% endif %}
-    {% if user.is_staff %}
-    <a class="button" href="{% url 'homework:assignment_create_for_course' course_slug=course.slug %}">Create assignment</a>
-    <a class="button secondary" href="{% url 'homework:lean_source_file_list' %}">Manage Lean source files</a>
-    {% endif %}
-    {% if not user.is_staff and user not in course.students.all %}
-    <form method="post" action="{% url 'homework:course_enroll' slug=course.slug %}">
-        {% csrf_token %}
-        <button class="button" type="submit">Enroll in course</button>
-    </form>
-    {% endif %}
-</c-card>
-{% if user.is_staff %}
-<c-card heading="Export grades">
-    <p>Download all student submissions and grades for this course.</p>
-    <a class="button" href="{% url 'homework:export_grades_csv' course_slug=course.slug %}">Export as CSV</a>
-    <a class="button secondary" href="{% url 'homework:export_grades_excel' course_slug=course.slug %}">Export as Excel</a>
-</c-card>
+{% if course.thumbnail_url %}
+<img class="course-thumbnail-banner" src="{{ course.thumbnail_url }}" alt="">
 {% endif %}
+<div class="course-header">
+    <h1>{{ course.display_name }}</h1>
+    <p class="meta">{% if instructors %}Taught by {% for m in instructors %}{{ m.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}No instructors assigned yet{% endif %}</p>
+    {% if can_edit %}
+    <div class="course-header-actions">
+        <a class="button secondary" href="{% url 'homework:course_renew' slug=course.slug %}">Renew</a>
+        <a class="button secondary" href="{% url 'homework:course_update' slug=course.slug %}">Edit course</a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="tabs" data-tabs>
+    <div class="tab-nav" role="tablist" aria-label="Course sections">
+        <button type="button" class="tab-link" role="tab" data-tab="description" id="tablink-description" aria-controls="tab-description" aria-selected="false" tabindex="-1">Description</button>
+        <button type="button" class="tab-link is-active" role="tab" data-tab="assignments" id="tablink-assignments" aria-controls="tab-assignments" aria-selected="true">Assignments</button>
+        <button type="button" class="tab-link" role="tab" data-tab="staff" id="tablink-staff" aria-controls="tab-staff" aria-selected="false" tabindex="-1">Staff</button>
+        <button type="button" class="tab-link" role="tab" data-tab="students" id="tablink-students" aria-controls="tab-students" aria-selected="false" tabindex="-1">Students</button>
+        {% if is_course_staff %}
+        <button type="button" class="tab-link" role="tab" data-tab="stats" id="tablink-stats" aria-controls="tab-stats" aria-selected="false" tabindex="-1">Grades and statistics</button>
+        {% endif %}
+    </div>
+
+    <section class="tab-panel" data-tab-panel="description" id="tab-description" role="tabpanel" aria-labelledby="tablink-description">
+        <c-card heading="Description">
+            <p>{{ course.description|linebreaks }}</p>
+            <c-image-credit :credit="course.thumbnail_credit" label="Thumbnail" />
+        </c-card>
+        {% if can_edit %}{% if renewed_from or renewals %}
+        <c-card heading="Offerings">
+            {% if renewed_from %}<p class="meta">Renewed from <a href="{{ renewed_from.get_absolute_url }}">{{ renewed_from.display_name }}</a>.</p>{% endif %}
+            {% if renewals %}
+            <p class="meta">Renewed as:</p>
+            <ul class="roster-list">
+                {% for r in renewals %}<li><a href="{{ r.get_absolute_url }}">{{ r.display_name }}</a></li>{% endfor %}
+            </ul>
+            {% endif %}
+        </c-card>
+        {% endif %}{% endif %}
+        {% if not is_course_staff and user not in course.students.all %}
+        <form method="post" action="{% url 'homework:course_enroll' slug=course.slug %}">
+            {% csrf_token %}
+            <button class="button" type="submit">Enroll in course</button>
+        </form>
+        {% endif %}
+    </section>
+
+    <section class="tab-panel is-active" data-tab-panel="assignments" id="tab-assignments" role="tabpanel" aria-labelledby="tablink-assignments">
+        <c-card heading="Assignments">
+            {% if assignment_rows %}
+            <p class="meta">Class average is the share of the {{ num_students }} enrolled student{{ num_students|pluralize }} who passed each problem ({{ scoring_method_label|lower }} scoring).</p>
+            <div class="assignment-list">
+                {% for row in assignment_rows %}
+                <div class="disclosure collapsed">
+                    <button type="button" class="disclosure-summary" aria-expanded="false" aria-controls="assignment-{{ row.assignment.pk }}">
+                        <span class="disclosure-caret" aria-hidden="true"></span>
+                        <span class="disclosure-title">{{ row.assignment.title }}</span>
+                        <span class="meta">{{ row.problems|length }} problem{{ row.problems|length|pluralize }}</span>
+                    </button>
+                    <div id="assignment-{{ row.assignment.pk }}" class="disclosure-content">
+                        <div class="disclosure-content-inner">
+                            <div class="disclosure-content-pad">
+                                <p class="meta"><a href="{{ row.assignment.get_absolute_url }}">Open assignment →</a></p>
+                                {% if row.problems %}
+                                <ul class="problem-scores">
+                                    {% for p in row.problems %}
+                                    <li class="problem-score-row">
+                                        <a class="problem-score-name" href="{{ p.url }}"><c-problem-name :problem="p.problem" :number="p.number" /></a>
+                                        {% if num_students %}
+                                        <span class="problem-score-value" title="Average {{ p.mean_points|floatformat:1 }} of {{ p.problem.points }} point{{ p.problem.points|pluralize }}">
+                                            {{ p.mean_percent|floatformat:0 }}%<span class="problem-score-detail">{{ p.passed }}/{{ num_students }}</span>
+                                        </span>
+                                        {% else %}
+                                        <span class="problem-score-value problem-score-empty">—</span>
+                                        {% endif %}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                {% else %}
+                                <p class="meta">No problems in this assignment yet.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p>No assignments have been added to this course yet.</p>
+            {% endif %}
+            {% if can_edit %}
+            <a class="button" href="{% url 'homework:assignment_create_for_course' course_slug=course.slug %}">Create assignment</a>
+            <a class="button secondary" href="{% url 'homework:lean_source_file_list' %}">Manage Lean source files</a>
+            {% endif %}
+        </c-card>
+    </section>
+
+    <section class="tab-panel" data-tab-panel="staff" id="tab-staff" role="tabpanel" aria-labelledby="tablink-staff">
+        <c-card heading="Staff">
+            <div class="roster-section">
+                <h3>Instructors</h3>
+                {% if instructors %}
+                <ul class="roster-list">
+                    {% for m in instructors %}
+                    <li>
+                        <span>{{ m.name }}</span>
+                        {% if can_manage_instructors %}
+                        <span class="roster-remove">
+                            <form method="post" action="{% url 'homework:course_remove_member' slug=course.slug %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="role" value="instructor">
+                                <input type="hidden" name="user_id" value="{{ m.id }}">
+                                <button type="submit" class="js-confirm">Remove</button>
+                            </form>
+                        </span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="meta">No instructors yet.</p>
+                {% endif %}
+                {% if can_manage_instructors %}
+                <form class="roster-add" method="post" action="{% url 'homework:course_add_member' slug=course.slug %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="role" value="instructor">
+                    <input type="text" name="identifier" placeholder="username or email" aria-label="Add instructor by username or email">
+                    <button class="button secondary" type="submit">Add instructor</button>
+                </form>
+                {% endif %}
+            </div>
+
+            <div class="roster-section">
+                <h3>Teaching assistants</h3>
+                {% if tas %}
+                <ul class="roster-list">
+                    {% for m in tas %}
+                    <li>
+                        <span>{{ m.name }}</span>
+                        {% if can_edit %}
+                        <span class="roster-remove">
+                            <form method="post" action="{% url 'homework:course_remove_member' slug=course.slug %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="role" value="ta">
+                                <input type="hidden" name="user_id" value="{{ m.id }}">
+                                <button type="submit" class="js-confirm">Remove</button>
+                            </form>
+                        </span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="meta">No teaching assistants yet.</p>
+                {% endif %}
+                {% if can_edit %}
+                <form class="roster-add" method="post" action="{% url 'homework:course_add_member' slug=course.slug %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="role" value="ta">
+                    <input type="text" name="identifier" placeholder="username or email" aria-label="Add TA by username or email">
+                    <button class="button secondary" type="submit">Add TA</button>
+                </form>
+                {% endif %}
+            </div>
+        </c-card>
+    </section>
+
+    <section class="tab-panel" data-tab-panel="students" id="tab-students" role="tabpanel" aria-labelledby="tablink-students">
+        <c-card heading="Students">
+            <div class="roster-section">
+                {% if is_course_staff %}
+                    {% if students %}
+                    <div class="students-toolbar">
+                        <button type="button" class="button secondary" id="show-all-grades">Show all grades</button>
+                        <button type="button" class="button secondary" id="hide-all-grades">Hide all grades</button>
+                        <span class="meta">Grades scored by {{ scoring_method_label|lower }}</span>
+                    </div>
+                    <table class="students-table">
+                        <thead>
+                            <tr><th>Name</th><th>Course grade</th>{% if can_edit %}<th></th>{% endif %}</tr>
+                        </thead>
+                        <tbody>
+                            {% for s in students %}
+                            <tr class="student-row">
+                                <td>{{ s.name }}</td>
+                                <td class="student-grade">
+                                    <button type="button" class="grade-toggle" aria-expanded="false" aria-label="Reveal grade for {{ s.name }}">
+                                        <span class="grade-placeholder" aria-hidden="true">•••</span>
+                                        <span class="grade-value">{% if s.percent is not None %}{{ s.percent|floatformat:0 }}%<span class="meta"> · {{ s.earned }}/{{ s.possible }} pts</span>{% else %}No graded problems{% endif %}</span>
+                                    </button>
+                                </td>
+                                {% if can_edit %}
+                                <td class="roster-remove">
+                                    <form method="post" action="{% url 'homework:course_remove_member' slug=course.slug %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="role" value="student">
+                                        <input type="hidden" name="user_id" value="{{ s.id }}">
+                                        <button type="submit" class="js-confirm">Remove</button>
+                                    </form>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if can_edit %}
+                    <div class="export-grades">
+                        <button type="button" class="button" id="export-grades-btn">Export</button>
+                        <span>as</span>
+                        <select id="export-grades-format" aria-label="Export file format">
+                            <option value="{% url 'homework:export_grades_csv' course_slug=course.slug %}" selected>CSV</option>
+                            <option value="{% url 'homework:export_grades_excel' course_slug=course.slug %}">Excel</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <p class="meta">No students enrolled yet.</p>
+                    {% endif %}
+                {% else %}
+                    {% if students %}
+                    <ul class="roster-list">
+                        {% for s in students %}<li><span>{{ s.name }}</span></li>{% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="meta">No students enrolled yet.</p>
+                    {% endif %}
+                {% endif %}
+                {% if can_edit %}
+                <form class="roster-add" method="post" action="{% url 'homework:course_add_member' slug=course.slug %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="role" value="student">
+                    <input type="text" name="identifier" placeholder="username or email" aria-label="Add student by username or email">
+                    <button class="button secondary" type="submit">Add student</button>
+                </form>
+                {% endif %}
+            </div>
+        </c-card>
+    </section>
+
+    {% if is_course_staff %}
+    <section class="tab-panel" data-tab-panel="stats" id="tab-stats" role="tabpanel" aria-labelledby="tablink-stats">
+        <c-card heading="Grade distribution by section">
+            {% if grade_sections %}
+            <div class="grade-chart">
+                {% for group in grade_chart %}
+                <div class="grade-group">
+                    <div class="grade-bars">
+                        {% for bar in group.bars %}
+                        <div class="grade-bar {{ bar.color_class }}" style="height: {{ bar.height|floatformat:0 }}%" title="{{ bar.label }} — {{ group.letter }}: {{ bar.count }}">
+                            {% if bar.count %}<span class="grade-bar-count">{{ bar.count }}</span>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="grade-axis-label">{{ group.letter }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            <ul class="chart-legend">
+                {% for s in grade_sections %}
+                <li><span class="legend-swatch {{ s.color_class }}" aria-hidden="true"></span>{{ s.course.display_name }} — {{ s.num_students }} student{{ s.num_students|pluralize }}{% if s.ungraded %}, {{ s.ungraded }} with no graded work{% endif %}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="meta">No sections to chart yet.</p>
+            {% endif %}
+        </c-card>
+
+        <c-card heading="Per-assignment breakdown">
+            {% if assignment_stats %}
+            <table>
+                <thead>
+                    <tr><th>Assignment</th><th>Submitted</th><th>Mean score (of those who submitted)</th></tr>
+                </thead>
+                <tbody>
+                    {% for a in assignment_stats %}
+                    <tr>
+                        <td><a href="{{ a.assignment.get_absolute_url }}">{{ a.assignment.title }}</a>{% if not a.assignment.is_published %} <span class="meta">(draft)</span>{% endif %}</td>
+                        <td>{{ a.submitters }} / {{ a.num_students }} student{{ a.num_students|pluralize }}</td>
+                        <td>{% if a.mean_score is not None %}{{ a.mean_score|floatformat:0 }}%{% else %}<span class="meta">No submissions yet</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="meta">No assignments yet.</p>
+            {% endif %}
+        </c-card>
+
+        <c-card heading="Compare sections">
+            {% if compare_options %}
+            <p class="meta">Hypothesis tests between this section and another offering. <strong>Observational</strong> — a difference may reflect cohort, term, or content drift, not teaching. With small classes, “not significant” usually means underpowered; weigh the effect sizes.</p>
+            <p class="section-compare-links">
+                {% for o in compare_options %}
+                <a class="button secondary{% if o.slug == compare_active %} is-active{% endif %}" href="?cmp={{ o.slug }}#stats">vs {{ o.display_name }}</a>
+                {% endfor %}
+            </p>
+
+            {% if comparison %}
+            <h3>This section vs {{ comparison.other.display_name }}</h3>
+
+            <h4>Overall course grade</h4>
+            {% with o=comparison.overall %}
+            {% if o.comparable %}
+            <p>Mean {{ o.mean_a|floatformat:1 }}% vs {{ o.mean_b|floatformat:1 }}% (n = {{ o.n_a }} vs {{ o.n_b }}).</p>
+            <ul class="stat-list">
+                <li>Welch <em>t</em> = {{ o.welch.statistic|floatformat:2 }}, <strong>p = {{ o.welch.pvalue|floatformat:3 }}</strong> (permutation)</li>
+                <li>Mann–Whitney p = {{ o.mannwhitney.pvalue|floatformat:3 }}</li>
+                <li>Effect size: Cohen's <em>d</em> = {{ o.cohens_d|floatformat:2 }}, Cliff's δ = {{ o.cliffs_delta|floatformat:2 }}</li>
+            </ul>
+            {% else %}
+            <p class="meta">Not enough students with grades to compare ({{ o.n_a }} vs {{ o.n_b }}).</p>
+            {% endif %}
+            {% endwith %}
+
+            <h4>Letter-grade mix</h4>
+            {% with l=comparison.letters %}
+            {% if l.comparable %}
+            <p>χ² = {{ l.chi2.statistic|floatformat:2 }}, <strong>p = {{ l.chi2.pvalue|floatformat:3 }}</strong>; Cramér's V = {{ l.cramers_v|floatformat:2 }}.</p>
+            {% else %}
+            <p class="meta">Not enough data to compare letter distributions.</p>
+            {% endif %}
+            {% endwith %}
+
+            <h4>Per assignment <span class="meta">(submitters only; p-values Benjamini–Hochberg corrected)</span></h4>
+            {% if comparison.per_assignment %}
+            <table>
+                <thead>
+                    <tr><th>Assignment</th><th>Mean (this)</th><th>Mean (other)</th><th>p (Welch)</th><th>p (adjusted)</th><th>Cohen's d</th></tr>
+                </thead>
+                <tbody>
+                    {% for pa in comparison.per_assignment %}
+                    <tr>
+                        <td>{{ pa.title }}</td>
+                        {% with s=pa.scores %}
+                        {% if s.comparable %}
+                        <td>{{ s.mean_a|floatformat:0 }}% <span class="meta">(n={{ s.n_a }})</span></td>
+                        <td>{{ s.mean_b|floatformat:0 }}% <span class="meta">(n={{ s.n_b }})</span></td>
+                        <td>{{ s.welch.pvalue|floatformat:3 }}</td>
+                        <td>{{ pa.adj_pvalue|floatformat:3 }}</td>
+                        <td>{{ s.cohens_d|floatformat:2 }}</td>
+                        {% else %}
+                        <td colspan="5" class="meta">Too few submitters to compare ({{ s.n_a }} vs {{ s.n_b }}).</td>
+                        {% endif %}
+                        {% endwith %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="meta">No assignments shared between the two sections.</p>
+            {% endif %}
+            {% endif %}
+            {% else %}
+            <p class="meta">No other offerings to compare with yet. Use “Renew” to create another section of this course.</p>
+            {% endif %}
+        </c-card>
+    </section>
+    {% endif %}
+</div>
 {% endblock %}

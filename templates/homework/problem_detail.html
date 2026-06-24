@@ -1,12 +1,8 @@
 {% extends 'homework/base.html' %}
 
-{% block title %}{{ problem.title }} – Pisa{% endblock %}
+{% block title %}<c-problem-name :problem="problem" :number="number" /> – Pisa{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.css" integrity="sha512-uf06llspW44/LZpHzHT6qBOIVODjWtv4MxCricRxkzvopAlSWnTf6hpZTFxuuZcuNE9CBQhqE0Seu1CoRk84nQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.js" integrity="sha512-t5Lcu24FbQybGnoIbv1GXDx633tW0Hd4reBUx74EIq/2Q39FzskADNbjc605pQA9kkojC+8bRXhHKEXoKJs3rw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/mode/simple.min.js" integrity="sha512-zyHuw9jVNShJwz2OsCfv7qBhVZRFK0Ez7u/NalYSm517xi9hVyQ71/FrFEPlAPvfoAZ/jmDT3ILXI3rwCLx0iA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/runmode/runmode.min.js" integrity="sha512-+6DVDL3K5+fmRHyC0UoO4m4vzqUo/S3x6PLn3xObP8X1mbmX8jYWHN+owqygDz4xv5MijHh48P9TJayxRGYYNw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
     /**
      * Lean LSP Client
@@ -17,9 +13,39 @@
         if (el) el.textContent = text;
     }
 
+    // Cross-window lock: when another window holds this user's single Lean instance, grey out
+    // the editor block and show an overlay with a "Use Lean here" takeover button.
+    function showLeanLock(message) {
+        const block = document.getElementById('lean-editor-block');
+        const overlay = document.getElementById('lean-lock-overlay');
+        const text = document.getElementById('lean-lock-text');
+        if (text && message) text.textContent = message;
+        if (block) block.classList.add('locked');
+        if (overlay) overlay.hidden = false;
+    }
+
+    function hideLeanLock() {
+        const block = document.getElementById('lean-editor-block');
+        const overlay = document.getElementById('lean-lock-overlay');
+        if (block) block.classList.remove('locked');
+        if (overlay) overlay.hidden = true;
+    }
+
     function setTabText(id, text) {
         const el = document.getElementById(id);
         if (el) el.textContent = text;
+    }
+
+    // Shown when Lean reports no remaining goals; also the trigger for the green "complete" styling.
+    const GOALS_COMPLETE_MESSAGE = 'No goals — proof complete! 🎉';
+
+    // Write the Goals body and tint its section green only when the proof is complete.
+    function setGoals(text) {
+        setTabText('lean-goals', text);
+        const section = document.getElementById('lean-goals')?.closest('.lean-panel');
+        if (section) {
+            section.classList.toggle('goals-complete', text === GOALS_COMPLETE_MESSAGE);
+        }
     }
 
     class LeanLSPClient {
@@ -32,11 +58,17 @@
             // Canonical client-side document URI; the server maps this onto the assembled file.
             this.docUri = 'file:///pisa/problem.lean';
             this.pendingGoals = new Set(); // ids of in-flight $/lean/plainGoal requests
+            this.locked = false; // another window holds this user's Lean instance
+            this.retriedQuick = false; // used the one-shot reload-race retry?
+            this.retryTimer = null;
+            this.pollTimer = null;
+            this.visHandler = null;
         }
 
-        connect() {
+        connect(takeover = false) {
             const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            const url = `${protocol}://${window.location.host}/ws/lean-lsp/${this.problemPk}/`;
+            const query = takeover ? '?takeover=1' : '';
+            const url = `${protocol}://${window.location.host}/ws/lean-lsp/${this.problemPk}/${query}`;
 
             this.ws = new WebSocket(url);
             this.ws.onopen = () => this.onOpen();
@@ -48,8 +80,72 @@
             this.ws.onclose = () => {
                 console.info('LSP WebSocket closed');
                 this.initialized = false;
-                setLeanStatus('Live feedback off');
+                // Stay quiet while a reconnect is pending (reload race) or the overlay is up.
+                if (!this.locked && !this.retryTimer) setLeanStatus('Live feedback off');
             };
+        }
+
+        // "Use Lean here": drop our socket and reconnect with takeover, evicting the holder.
+        takeOver() {
+            hideLeanLock();
+            this.locked = false;
+            this.clearRetry();
+            this.stopPolling();
+            setLeanStatus('Connecting…');
+            if (this.ws) {
+                try {
+                    this.ws.onclose = null;
+                    this.ws.close();
+                } catch (e) { /* already closed */ }
+                this.ws = null;
+            }
+            this.connect(true);
+        }
+
+        scheduleRetry(delay) {
+            this.clearRetry();
+            this.retryTimer = setTimeout(() => {
+                this.retryTimer = null;
+                const ws = this.ws;
+                // Don't stack a second socket on a still-connecting/open one.
+                if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+                    return;
+                }
+                this.connect(false);
+            }, delay);
+        }
+
+        clearRetry() {
+            if (this.retryTimer) {
+                clearTimeout(this.retryTimer);
+                this.retryTimer = null;
+            }
+        }
+
+        // While the overlay is up, periodically attempt a passive reconnect so this tab takes
+        // over automatically once the holding window releases the slot (a passive connect claims
+        // a free slot server-side). Polls only while visible, and retries the moment the user
+        // switches back to this tab.
+        startPolling() {
+            if (this.pollTimer) return;
+            this.pollTimer = setInterval(() => {
+                if (this.locked && !document.hidden) this.scheduleRetry(0);
+            }, 5000);
+            this.visHandler = () => {
+                if (this.locked && !document.hidden) this.scheduleRetry(0);
+            };
+            document.addEventListener('visibilitychange', this.visHandler);
+        }
+
+        stopPolling() {
+            if (this.pollTimer) {
+                clearInterval(this.pollTimer);
+                this.pollTimer = null;
+            }
+            if (this.visHandler) {
+                document.removeEventListener('visibilitychange', this.visHandler);
+                this.visHandler = null;
+            }
         }
 
         onOpen() {
@@ -79,8 +175,29 @@
                 return;
             }
 
-            // Server-side status (e.g. live feedback unavailable for this problem).
+            // Server-side status: live feedback unavailable for this problem, or the user's
+            // single Lean instance is already open in another window.
             if (message.pisa) {
+                const status = message.pisa.status;
+                if (status === 'busy' || status === 'taken_over') {
+                    this.initialized = false;
+                    // A reload can momentarily collide with the previous connection's teardown.
+                    // On the first "busy", retry once quickly before greying the editor, so a
+                    // reload recovers without flashing the overlay. An explicit "taken_over"
+                    // (another window stole the slot) goes straight to the overlay.
+                    if (status === 'busy' && !this.retriedQuick && !this.locked) {
+                        this.retriedQuick = true;
+                        setLeanStatus('Connecting…');
+                        this.scheduleRetry(800);
+                        return;
+                    }
+                    this.locked = true;
+                    showLeanLock(message.pisa.reason);
+                    setLeanStatus('Paused — open in another window');
+                    // Poll so this tab auto-promotes when the holding window releases the slot.
+                    this.startPolling();
+                    return;
+                }
                 console.info('Live feedback unavailable:', message.pisa.reason);
                 this.initialized = false;
                 setLeanStatus('Live feedback off');
@@ -95,6 +212,11 @@
             // initialize response -> handshake complete; open the document.
             if (!message.method && message.result && message.result.capabilities) {
                 this.initialized = true;
+                this.locked = false;
+                this.retriedQuick = false;
+                this.clearRetry();
+                this.stopPolling();
+                hideLeanLock();
                 this.send({ jsonrpc: '2.0', method: 'initialized', params: {} });
                 this.didOpen(leanEditor ? leanEditor.getValue() : '');
                 setLeanStatus('Live feedback on');
@@ -115,6 +237,7 @@
             const errors = diagnostics.filter((d) => d.severity === 1);
             const others = diagnostics.filter((d) => d.severity !== 1);
             setTabText('lean-errors', errors.length ? errors.map(format).join('\n\n') : 'No errors.');
+            setErrorCount(errors.length);
             setTabText('lean-messages', others.length ? others.map(format).join('\n\n') : 'No messages.');
             setLeanStatus(errors.length ? `${errors.length} error${errors.length > 1 ? 's' : ''}` : 'No errors');
             // Diagnostics settled — refresh the goal at the cursor.
@@ -123,11 +246,12 @@
 
         onGoalResult(result) {
             const goals = (result && result.goals) || [];
-            setTabText('lean-goals', goals.length ? goals.join('\n\n') : 'No goals — proof complete! 🎉');
+            setGoals(goals.length ? goals.join('\n\n') : GOALS_COMPLETE_MESSAGE);
         }
 
         onError() {
-            setLeanStatus('Live feedback off');
+            // Don't clobber the status while a reconnect is pending or the overlay is up.
+            if (!this.locked && !this.retryTimer) setLeanStatus('Live feedback off');
         }
 
         send(message) {
@@ -190,33 +314,12 @@
 
     let leanEditor;
     const editableEditors = new Map();
-    const readonlyEditors = new Map();
-
-    function createReadOnlyEditor(textarea) {
-        const editor = CodeMirror.fromTextArea(textarea, {
-            mode: 'lean',
-            theme: 'default',
-            lineNumbers: true,
-            matchBrackets: true,
-            indentUnit: 2,
-            indentWithTabs: false,
-            tabSize: 2,
-            viewportMargin: Infinity,
-            readOnly: 'nocursor',
-        });
-        const lineHeight = typeof editor.defaultTextHeight === 'function' ? editor.defaultTextHeight() : 20;
-        const height = Math.max(lineHeight * editor.lineCount() + 12, lineHeight * 3);
-        editor.setSize(null, height);
-        editor.getWrapperElement().classList.add('fixed-code-editor');
-        return editor;
-    }
 
     function saveEditorValues() {
         if (leanEditor) {
             leanEditor.save();
         }
         editableEditors.forEach((editor) => editor.save());
-        readonlyEditors.forEach((editor) => editor.save());
     }
 
     function showEditorFallback() {
@@ -238,25 +341,6 @@
             if (typeof CodeMirror === 'undefined') {
                 throw new Error('CodeMirror is not available');
             }
-
-            CodeMirror.defineSimpleMode('lean', {
-                start: [
-                    { regex: /--.*/, token: 'comment' },
-                    { regex: /--\|[\s\S]*?$/, token: 'comment' },
-                    { regex: /"(?:[^\\"]|\\.)*"/, token: 'string' },
-                    {
-                        regex: /\b(?:def|theorem|lemma|example|structure|inductive|namespace|section|import|open|end|by|have|let|if|then|else|match|with|fun|lambda|forall|exists|class|instance|namespace|begin|do)\b/,
-                        token: 'keyword',
-                    },
-                    { regex: /\b(?:Nat|Type|Prop|Sort|True|False|List|Option|Bool|String)\b/, token: 'atom' },
-                    { regex: /0x[0-9A-Fa-f]+|[0-9]+/, token: 'number' },
-                    { regex: /[:=\-+*/<>!]+/, token: 'operator' },
-                    { regex: /[\[\]{}()\.,;]/, token: 'bracket' },
-                ],
-                meta: {
-                    lineComment: '--',
-                },
-            });
 
             document.querySelectorAll('#lean-code, .editable-code').forEach((textarea) => {
                 const editor = CodeMirror.fromTextArea(textarea, {
@@ -291,104 +375,66 @@
                 }
             });
 
-            document.querySelectorAll('.read-only-code').forEach((textarea) => {
-                if (textarea.closest('.imported-source-file')?.classList.contains('collapsed')) {
-                    return;
-                }
-                const editor = createReadOnlyEditor(textarea);
-                readonlyEditors.set(textarea, editor);
-            });
-
             // Initialize LSP client and connect (scoped to this problem).
             lspClient = new LeanLSPClient(Number('{{ problem.pk }}'));
             lspClient.connect();
+
+            const useHereButton = document.getElementById('lean-use-here');
+            if (useHereButton) {
+                useHereButton.addEventListener('click', () => lspClient.takeOver());
+            }
         } catch (error) {
             console.warn('CodeMirror initialization failed:', error);
             showEditorFallback();
         }
 
-        initLeanTabs();
-        initImportedFileToggles();
+        initLeanPanels();
     });
 
 
-    function initImportedFileToggles() {
-        document.querySelectorAll('.toggle-import').forEach((button) => {
-            const container = button.closest('.imported-source-file');
-            if (!container) return;
-            button.textContent = container.classList.contains('collapsed') ? 'Show' : 'Hide';
-            button.addEventListener('click', () => {
-                const container = button.closest('.imported-source-file');
-                if (!container) return;
-                const expanded = container.classList.toggle('collapsed') === false;
-                button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                button.textContent = expanded ? 'Hide' : 'Show';
-
-                if (expanded) {
-                    const textarea = container.querySelector('.read-only-code');
-                    if (!textarea) return;
-                    if (!readonlyEditors.has(textarea)) {
-                        const editor = createReadOnlyEditor(textarea);
-                        readonlyEditors.set(textarea, editor);
-                    } else {
-                        const editor = readonlyEditors.get(textarea);
-                        editor.refresh();
-                    }
+    // Only the Errors section is collapsible (and ships collapsed). Its heading button
+    // toggles the panel's `collapsed` class; Goals and Messages are always-visible sections.
+    function initLeanPanels() {
+        document.querySelectorAll('.lean-panel-header').forEach((header) => {
+            header.addEventListener('click', () => {
+                const panel = header.closest('.lean-panel');
+                if (!panel) {
+                    return;
                 }
+                const collapsed = panel.classList.toggle('collapsed');
+                header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
             });
         });
     }
 
-    function initLeanTabs() {
-        const buttons = Array.from(document.querySelectorAll('.lean-tab'));
-        const storedTab = window.localStorage.getItem('pisa-lean-active-tab');
-        const defaultTab = buttons.find((button) => button.dataset.target === storedTab) || buttons[0];
-
-        function activateTab(button) {
-            buttons.forEach((btn) => {
-                btn.classList.toggle('active', btn === button);
-                btn.setAttribute('aria-selected', btn === button ? 'true' : 'false');
-                btn.setAttribute('tabindex', btn === button ? '0' : '-1');
-            });
-
-            document.querySelectorAll('.lean-tab-panel').forEach((panel) => {
-                panel.classList.toggle('active', panel.id === button.dataset.target);
-            });
-
-            window.localStorage.setItem('pisa-lean-active-tab', button.dataset.target);
-            button.focus({ preventScroll: true });
-        }
-
-        buttons.forEach((button) => {
-            button.addEventListener('click', () => activateTab(button));
-            button.addEventListener('keydown', (event) => {
-                if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-                    event.preventDefault();
-                    const currentIndex = buttons.indexOf(event.currentTarget);
-                    const nextIndex = event.key === 'ArrowRight'
-                        ? (currentIndex + 1) % buttons.length
-                        : (currentIndex - 1 + buttons.length) % buttons.length;
-                    activateTab(buttons[nextIndex]);
-                }
-            });
-        });
-
-        if (defaultTab) {
-            activateTab(defaultTab);
+    // The Errors panel is collapsed by default, so surface its count on the header
+    // (e.g. "Errors (3)") to flag problems without forcing the panel open.
+    function setErrorCount(count) {
+        const header = document.getElementById('lean-errors-header');
+        if (header) {
+            header.textContent = count ? `Errors (${count})` : 'Errors';
         }
     }
 
     function renderLeanFeedback(data) {
-        const goals = document.getElementById('lean-goals');
         const messages = document.getElementById('lean-messages');
         const errors = document.getElementById('lean-errors');
 
-        goals.textContent =
-            data.goals && data.goals.length ? data.goals.join('\n') : 'No goals produced.';
+        const hasGoals = data.goals && data.goals.length;
+        const hasErrors = data.errors && data.errors.length;
+        if (hasGoals) {
+            setGoals(data.goals.join('\n'));
+        } else if (hasErrors) {
+            // No goals, but the run errored — don't claim the proof is complete.
+            setGoals('No goals produced.');
+        } else {
+            setGoals(GOALS_COMPLETE_MESSAGE);
+        }
         messages.textContent =
             data.messages && data.messages.length ? data.messages.join('\n') : 'No messages produced.';
         errors.textContent =
             data.errors && data.errors.length ? data.errors.join('\n') : 'No errors produced.';
+        setErrorCount(data.errors ? data.errors.length : 0);
 
         const diagnostics = document.getElementById('lean-diagnostics');
         if (
@@ -508,10 +554,10 @@
 
 {% block content %}
 <c-page-header>
-    <c-slot name="title">{{ problem.title }} <span class="meta">({{ problem.points }} point{% if problem.points != 1 %}s{% endif %})</span></c-slot>
-    <p class="meta">Problem from {{ problem.assignment.title }}</p>
-    {% if user.is_staff %}
-    <a class="button secondary" href="{% url 'homework:problem_update' pk=problem.pk %}">Edit problem</a>
+    <c-slot name="title"><c-problem-name :problem="problem" :number="number" /> <span class="meta">({{ problem.points }} point{{ problem.points|pluralize }})</span></c-slot>
+    <p class="meta">Problem from {{ problem.assignment.title }}{% if due_date %} · Due {{ due_date|date:'M d, Y H:i' }}{% if past_due %} <span class="late-badge">past due</span>{% endif %}{% endif %}</p>
+    {% if can_edit %}
+    <a class="button secondary" href="{% url 'homework:problem_update' course_slug=problem.assignment.course.slug assignment_slug=problem.assignment.slug number=number %}">Edit problem</a>
     {% endif %}
 </c-page-header>
 <c-card heading="Statement">
@@ -533,6 +579,7 @@
     {% endfor %}
 </c-card>
 <c-card>
+    <div class="lean-editor-block" id="lean-editor-block">
     <div class="problem-layout">
         <div>
             <h2>Lean editor</h2>
@@ -566,20 +613,83 @@
         </div>
 
         <aside class="problem-sidebar">
-            <c-card>
+            <c-card class="lean-diagnostics">
                 <h3>Lean Diagnostics</h3>
                 <div id="lean-status" class="meta">No run yet</div>
-                <div class="lean-tabs" role="tablist" aria-label="Lean feedback tabs">
-                    <button id="lean-goals-tab" type="button" class="lean-tab" role="tab" aria-controls="lean-goals" data-target="lean-goals">Goals</button>
-                    <button id="lean-messages-tab" type="button" class="lean-tab" role="tab" aria-controls="lean-messages" data-target="lean-messages">Messages</button>
-                    <button id="lean-errors-tab" type="button" class="lean-tab" role="tab" aria-controls="lean-errors" data-target="lean-errors">Errors</button>
+                <div class="lean-panels">
+                    <section class="lean-panel">
+                        <h4 class="lean-panel-title">Goals</h4>
+                        <div id="lean-goals" class="lean-panel-body">No goals yet.</div>
+                    </section>
+                    <section class="lean-panel">
+                        <h4 class="lean-panel-title">Messages</h4>
+                        <div id="lean-messages" class="lean-panel-body">No messages yet.</div>
+                    </section>
+                    <section class="lean-panel collapsed">
+                        <button id="lean-errors-header" type="button" class="lean-panel-header" aria-expanded="false" aria-controls="lean-errors">Errors</button>
+                        <div id="lean-errors" class="lean-panel-body">No errors yet.</div>
+                    </section>
                 </div>
-                <div id="lean-goals" class="lean-tab-panel" role="tabpanel" aria-labelledby="lean-goals-tab">No goals yet.</div>
-                <div id="lean-messages" class="lean-tab-panel" role="tabpanel" aria-labelledby="lean-messages-tab">No messages yet.</div>
-                <div id="lean-errors" class="lean-tab-panel" role="tabpanel" aria-labelledby="lean-errors-tab">No errors yet.</div>
                 <div id="lean-diagnostics" class="fallback-message hidden"></div>
             </c-card>
         </aside>
     </div>
+    <div class="lean-lock-overlay" id="lean-lock-overlay" hidden>
+        <div class="lean-lock-message">
+            <p id="lean-lock-text">A Pisa Lean instance is open in another window.</p>
+            <button type="button" class="button" id="lean-use-here">Use Lean here</button>
+        </div>
+    </div>
+    </div>
 </c-card>
+
+{% if submissions %}
+<c-card heading="Your submissions">
+    <ul class="submission-history">
+        {% for s in submissions %}
+        <li class="submission-item submission-{{ s.status }}">
+            <div class="submission-head">
+                <span class="submission-status">{{ s.get_status_display }}</span>
+                <span class="meta">{{ s.created_at|date:'M d, Y H:i' }}{% if s.is_late %} · <span class="late-badge">Late</span>{% endif %}</span>
+            </div>
+            {% if s.result %}<pre class="submission-result mono">{{ s.result }}</pre>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</c-card>
+{% endif %}
+
+{% if pager %}
+<nav class="problem-pager" aria-label="Problem navigation">
+    {% if pager.prev %}
+    <a href="{% url 'homework:problem_detail' course_slug=problem.assignment.course.slug assignment_slug=problem.assignment.slug number=pager.prev %}" rel="prev" aria-label="Previous problem">‹</a>
+    {% else %}
+    <span class="disabled" aria-hidden="true">‹</span>
+    {% endif %}
+
+    {% if pager.show_first %}
+    <a href="{% url 'homework:problem_detail' course_slug=problem.assignment.course.slug assignment_slug=problem.assignment.slug number=1 %}">First</a>
+    <span class="ellipsis" aria-hidden="true">…</span>
+    {% endif %}
+
+    {% for n in pager.numbers %}
+        {% if n == pager.current %}
+        <span class="current" aria-current="page">{{ n }}</span>
+        {% else %}
+        <a href="{% url 'homework:problem_detail' course_slug=problem.assignment.course.slug assignment_slug=problem.assignment.slug number=n %}">{{ n }}</a>
+        {% endif %}
+    {% endfor %}
+
+    {% if pager.show_last %}
+    <span class="ellipsis" aria-hidden="true">…</span>
+    <a href="{% url 'homework:problem_detail' course_slug=problem.assignment.course.slug assignment_slug=problem.assignment.slug number=pager.total %}">Last</a>
+    {% endif %}
+
+    {% if pager.next %}
+    <a href="{% url 'homework:problem_detail' course_slug=problem.assignment.course.slug assignment_slug=problem.assignment.slug number=pager.next %}" rel="next" aria-label="Next problem">›</a>
+    {% else %}
+    <span class="disabled" aria-hidden="true">›</span>
+    {% endif %}
+</nav>
+{% endif %}
 {% endblock %}

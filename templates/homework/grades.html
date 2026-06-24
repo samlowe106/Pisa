@@ -4,11 +4,11 @@
 
 {% block content %}
 <c-page-header>
-    <c-slot name="title">{% if user.is_staff %}All Grades{% else %}My Grades{% endif %}</c-slot>
-    <p class="meta">{% if user.is_staff %}View all student submissions and grades{% else %}View your submission history and results{% endif %}</p>
+    <c-slot name="title">{% if is_staff_view %}All Grades{% else %}My Grades{% endif %}</c-slot>
+    <p class="meta">{% if is_staff_view %}View all student submissions and grades{% else %}View your submission history and results{% endif %}</p>
 </c-page-header>
 
-{% if user.is_staff %}
+{% if is_staff_view %}
     <!-- Instructor View -->
     <c-card heading="Recent Submissions">
         {% if submissions %}
@@ -27,8 +27,8 @@
                 {% for submission in submissions %}
                 <tr>
                     <td>{{ submission.user.get_full_name|default:submission.user.username }}</td>
-                    <td><a href="{% url 'homework:assignment_detail' slug=submission.problem.assignment.slug %}">{{ submission.problem.assignment.title }}</a></td>
-                    <td><a href="{% url 'homework:problem_detail' pk=submission.problem.pk %}">{{ submission.problem.title }}</a></td>
+                    <td><a href="{{ submission.problem.assignment.get_absolute_url }}">{{ submission.problem.assignment.title }}</a></td>
+                    <td><a href="{{ submission.problem.get_absolute_url }}">{{ submission.problem.display_name }}</a></td>
                     <td>
                         <span class="{% if submission.status == 'passed' %}text-green{% elif submission.status == 'failed' %}text-red{% else %}text-yellow{% endif %}">
                             {{ submission.get_status_display }}
@@ -68,7 +68,7 @@
                 {% for problem in assignment.problems.all %}
                 {% with submissions=problem.submissions.all %}
                 <tr>
-                    <td><a href="{% url 'homework:problem_detail' pk=problem.pk %}">{{ problem.title }}</a></td>
+                    <td><a href="{{ problem.get_absolute_url }}"><c-problem-name :problem="problem" :number="forloop.counter" /></a></td>
                     <td>{{ submissions|length }}</td>
                     <td>{{ submissions|length }} submissions</td>
                 </tr>
@@ -99,8 +99,8 @@
             <tbody>
                 {% for submission in submissions %}
                 <tr>
-                    <td><a href="{% url 'homework:assignment_detail' slug=submission.problem.assignment.slug %}">{{ submission.problem.assignment.title }}</a></td>
-                    <td><a href="{% url 'homework:problem_detail' pk=submission.problem.pk %}">{{ submission.problem.title }}</a></td>
+                    <td><a href="{{ submission.problem.assignment.get_absolute_url }}">{{ submission.problem.assignment.title }}</a></td>
+                    <td><a href="{{ submission.problem.get_absolute_url }}">{{ submission.problem.display_name }}</a></td>
                     <td>
                         <span class="{% if submission.status == 'passed' %}text-green{% elif submission.status == 'failed' %}text-red{% else %}text-yellow{% endif %}">
                             {{ submission.get_status_display }}

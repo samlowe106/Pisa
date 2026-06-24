@@ -1,0 +1,35 @@
+<c-vars :card="None" />
+<a class="course-card" data-course-name="{{ card.course.display_name }}" href="{% url 'homework:course_detail' slug=card.course.slug %}">
+    <div class="course-card-thumb-wrap">
+        {% if card.course.thumbnail_url %}
+        <img class="course-card-thumb" src="{{ card.course.thumbnail_url }}" alt="">
+        {% else %}
+        <div class="course-card-thumb course-card-thumb-empty" aria-hidden="true"></div>
+        {% endif %}
+        {% if card.role == 'staff' %}
+        {% if card.draft_assignments %}<span class="open-badge" title="{{ card.draft_assignments }} unpublished draft{{ card.draft_assignments|pluralize }}">{{ card.draft_assignments }}</span>{% endif %}
+        {% else %}
+        {% if card.open_assignments %}<span class="open-badge" title="{{ card.open_assignments }} open assignment{{ card.open_assignments|pluralize }}">{{ card.open_assignments }}</span>{% endif %}
+        {% endif %}
+    </div>
+    <div class="course-card-info">
+        <h2>{{ card.course.display_name }}</h2>
+        <p class="meta">{{ card.course.description|truncatechars:150 }}</p>
+    </div>
+    <div class="course-card-grade{% if card.grade %} has-grade{% endif %}">
+        {% if card.role == 'staff' %}
+        <div class="count-display">
+            <span class="count-number">{{ card.student_count }}</span>
+            <span class="count-label">student{{ card.student_count|pluralize }}</span>
+        </div>
+        {% else %}
+        {% if card.grade %}
+        <div class="grade-display">
+            <span class="grade-letter {{ card.grade.cls }}">{{ card.grade.letter }}</span>
+            <span class="grade-score">{{ card.grade.earned }} / {{ card.grade.possible }}</span>
+        </div>
+        {% endif %}
+        <div class="grade-placeholder" aria-hidden="true"></div>
+        {% endif %}
+    </div>
+</a>

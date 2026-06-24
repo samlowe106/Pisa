@@ -4,10 +4,7 @@
 
 {% block content %}
 <c-page-header title="Assignments">
-    <p class="meta">{% if user.is_staff %}Manage all assignments.{% else %}Browse published Lean assignments and open problems to begin practicing.{% endif %}</p>
-    {% if user.is_staff %}
-    <a class="button" href="{% url 'homework:assignment_create' %}">Create assignment</a>
-    {% endif %}
+    <p class="meta">Your published assignments — open a problem to start practicing.</p>
 </c-page-header>
 <c-card>
     {% if assignments %}
@@ -17,26 +14,20 @@
                 <th>Title</th>
                 <th>Course</th>
                 <th>Due</th>
-                {% if user.is_staff %}<th>Status</th><th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for assignment in assignments %}
             <tr>
-                <td><a href="{% url 'homework:assignment_detail' slug=assignment.slug %}">{{ assignment.title }}</a>
-                </td>
+                <td><a href="{{ assignment.get_absolute_url }}">{{ assignment.title }}</a></td>
                 <td><a href="{% url 'homework:course_detail' slug=assignment.course.slug %}">{{ assignment.course.title }}</a></td>
                 <td>{{ assignment.due_date|default:'TBD' }}</td>
-                {% if user.is_staff %}
-                <td>{% if assignment.is_published %}Published{% else %}Draft{% endif %}</td>
-                <td><a href="{% url 'homework:assignment_update' slug=assignment.slug %}">Edit</a></td>
-                {% endif %}
             </tr>
             {% endfor %}
         </tbody>
     </table>
     {% else %}
-    <p>No assignments{% if user.is_staff %} have been created{% else %} are published{% endif %} yet.</p>
+    <p>No assignments are published yet.</p>
     {% endif %}
 </c-card>
 {% endblock %}

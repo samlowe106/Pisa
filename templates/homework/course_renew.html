@@ -1,0 +1,18 @@
+{% extends 'homework/base.html' %}
+
+{% block title %}Renew {{ course.title }} – Pisa{% endblock %}
+
+{% block content %}
+<c-page-header title="Renew course">
+    <p class="meta">Create a fresh offering of <strong>{{ course.display_name }}</strong>. Its assignments, problems, settings, and staff (instructors &amp; TAs) are copied; students, submissions, and due dates are not.</p>
+</c-page-header>
+<c-card>
+    <form method="post">
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}<p class="alert">{{ error }}</p>{% endfor %}
+        <c-form-fields :form="form" />
+        <button class="button" type="submit">Create new offering</button>
+        <a class="button secondary" href="{{ course.get_absolute_url }}">Cancel</a>
+    </form>
+</c-card>
+{% endblock %}

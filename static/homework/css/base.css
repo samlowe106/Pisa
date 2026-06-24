@@ -1,9 +1,25 @@
 /* BASE */
 
+/* Self-hosted (no external font CDN, so the CSP stays tight). Variable weight 200–800. */
+@font-face {
+    font-family: 'Manrope';
+    font-style: normal;
+    font-weight: 200 800;
+    font-display: swap;
+    src: url('../fonts/manrope-variable.woff2') format('woff2');
+}
+
+:root {
+    /* Shared monospace stack for every code surface. */
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
 body {
     background: #f8fafc;
     color: #111827;
-    font-family: system-ui, sans-serif;
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.005em;
     margin: 0;
     padding: 0;
 }
@@ -21,7 +37,7 @@ body a:hover {
 
 pre,
 textarea {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-family: var(--font-mono);
     font-size: 0.95rem;
 }
 
@@ -76,6 +92,16 @@ header a:hover {
     padding: 1.5rem 0;
 }
 
+/* Compact, centered column for auth pages (e.g. login). */
+.auth {
+    margin: 1rem auto;
+    max-width: 24rem;
+}
+
+.auth .hero {
+    padding: 0.5rem 0;
+}
+
 .footer {
     color: #6b7280;
     margin-top: 2rem;
@@ -127,7 +153,7 @@ header a:hover {
 }
 
 .mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-family: var(--font-mono);
 }
 
 .hidden {
@@ -209,8 +235,6 @@ header a:hover {
 }
 
 .CodeMirror.fixed-code-editor {
-    border: 1px solid #d1d5db;
-    border-radius: 0.5rem;
     font-size: 0.875rem;
     line-height: 1.5;
 }
@@ -220,7 +244,7 @@ header a:hover {
     border: 1px solid #d1d5db;
     border-radius: 0.5rem;
     display: block;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-family: var(--font-mono);
     font-size: 0.875rem;
     line-height: 1.5;
     margin: 0;
@@ -230,15 +254,6 @@ header a:hover {
     resize: vertical;
     white-space: pre;
     width: 100%;
-}
-
-.code-block {
-    background: #f9fafb;
-    border: 1px solid #d1d5db;
-    border-radius: 0.5rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-    overflow-x: auto;
-    padding: 1rem;
 }
 
 
@@ -278,108 +293,153 @@ header a:hover {
     margin-bottom: 1rem;
 }
 
-.field label {
+/* Only the field's own label — not the per-option labels inside a checkbox/radio group. */
+.field > label {
     display: block;
     font-weight: 600;
     margin-bottom: 0.35rem;
 }
 
-.field input,
-.field textarea {
+/* Give text inputs and selects the same framed look as textareas (above). */
+.field input:not([type="checkbox"]):not([type="radio"]),
+.field select {
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font: inherit;
+    padding: 0.55rem 0.7rem;
     width: 100%;
 }
 
-
-/* Imported Lean4 Source Files */
-
-.imported-source-file {
-    margin-bottom: 1rem;
+.field select[multiple] {
+    padding: 0.25rem;
 }
 
-.imported-source-file-header {
-    align-items: center;
-    display: flex;
-    gap: 1rem;
-    justify-content: space-between;
-    margin-bottom: 0.5rem;
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+    border-color: #2563eb;
+    outline: 2px solid rgba(37, 99, 235, 0.2);
+    outline-offset: 0;
 }
 
-.imported-source-file-header button {
+/* Checkboxes/radios keep their native size and sit inline with their text. */
+.field input[type="checkbox"],
+.field input[type="radio"] {
+    margin-right: 0.4rem;
+    vertical-align: middle;
+    width: auto;
+}
+
+
+/* Imported Lean source files reuse the generic .disclosure widget (defined below). Only the
+   "Hide" button at the bottom of an expanded file is source-file specific. */
+
+.source-file-hide {
     appearance: none;
     background: #f3f4f6;
     border: 1px solid #d1d5db;
     border-radius: 0.375rem;
-    color: #111827;
+    color: #374151;
     cursor: pointer;
-    font-size: 0.85rem;
-    padding: 0.35rem 0.65rem;
+    font-size: 0.8rem;
+    margin-top: 0.6rem;
+    padding: 0.3rem 0.75rem;
 }
 
-.imported-source-file-header button:hover {
+.source-file-hide:hover {
     background: #e5e7eb;
 }
 
-.imported-source-file.collapsed .CodeMirror,
-.imported-source-file.collapsed textarea {
-    display: none;
+
+/* The whole diagnostics card sticks beside the editor and scrolls internally, so a long
+   panel can't stretch off-screen or break out of the editor block. */
+.lean-diagnostics {
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    position: sticky;
+    top: 1rem;
 }
 
-.imported-source-file.collapsed .runmode {
-    display: none;
-}
-
-
-/* Lean Tabs */
-
-.lean-tabs {
+.lean-panels {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    flex-direction: column;
     margin-top: 1rem;
 }
 
-.lean-tab {
-    align-items: center;
-    appearance: none;
-    background: #f9fafb;
-    border: 1px solid #d1d5db;
-    border-radius: 0.375rem;
-    color: #111827;
-    cursor: pointer;
-    display: inline-flex;
-    font-size: 0.9rem;
-    gap: 0.2rem;
-    padding: 0.4rem 0.75rem;
-    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+/* Each diagnostic is its own section, divided from the previous one by a hairline. */
+.lean-panel + .lean-panel {
+    border-top: 1px solid #e5e7eb;
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
 }
 
-.lean-tab:focus-visible {
+/* Goals/Messages headings are static; only the Errors heading is a collapse toggle, but
+   both read the same so the sections feel uniform. */
+.lean-panel-title,
+.lean-panel-header {
+    color: #111827;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.lean-panel-header {
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    display: flex;
+    gap: 0.4rem;
+    justify-content: space-between;
+    padding: 0;
+    width: 100%;
+}
+
+.lean-panel-header:focus-visible {
     outline: 2px solid #2563eb;
     outline-offset: 2px;
 }
 
-.lean-tab.active {
-    background: #111827;
-    border-color: #111827;
-    color: #fff;
+.lean-panel-header::after {
+    color: #6b7280;
+    content: "▾";
+    transition: transform 120ms ease;
 }
 
-.lean-tab-panel {
-    background: #f8fafc;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.5rem;
-    display: none;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+.lean-panel.collapsed .lean-panel-header::after {
+    transform: rotate(-90deg);
+}
+
+.lean-panel-body {
+    color: #374151;
+    font-family: var(--font-mono);
     font-size: 0.9rem;
-    margin-top: 0.75rem;
-    max-height: 420px;
+    margin-top: 0.4rem;
+    max-height: 22rem;
     overflow: auto;
-    padding: 0.75rem;
     white-space: pre-wrap;
+    word-break: break-word;
 }
 
-.lean-tab-panel.active {
-    display: block;
+.lean-panel.collapsed .lean-panel-body {
+    display: none;
+}
+
+/* Proof complete: tint the Goals section green. Dark-green text on a light-green wash keeps
+   strong luminance contrast, so it stays readable for red–green colorblind users — and the
+   🎉 in the message is a non-color cue as well. */
+.lean-panel.goals-complete .lean-panel-title {
+    color: #166534;
+}
+
+.lean-panel.goals-complete .lean-panel-body {
+    background: #dcfce7;
+    border-radius: 0.5rem;
+    color: #166534;
+    font-family: inherit;
+    padding: 0.6rem 0.75rem;
 }
 
 
@@ -422,6 +482,224 @@ header a:hover {
     grid-template-columns: 1fr 320px;
 }
 
+/* Cross-window Lean lock: grey the editor and overlay a takeover prompt when the user's single
+   Lean instance is open in another window (see the lock logic in problem_detail.html). */
+.lean-editor-block {
+    position: relative;
+}
+
+.lean-editor-block.locked .problem-layout {
+    filter: grayscale(0.6);
+    opacity: 0.45;
+    pointer-events: none;
+    user-select: none;
+}
+
+.lean-lock-overlay {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.55);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    position: absolute;
+}
+
+.lean-lock-overlay[hidden] {
+    display: none;
+}
+
+.lean-lock-message {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    max-width: 22rem;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.lean-lock-message p {
+    margin: 0 0 1rem;
+}
+
+/* Submission history on the problem page. */
+.submission-history {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.submission-item {
+    border-left: 3px solid #cbd5e1;
+    padding: 0.25rem 0 0.25rem 0.75rem;
+}
+
+.submission-passed {
+    border-left-color: #16a34a;
+}
+
+.submission-failed {
+    border-left-color: #dc2626;
+}
+
+.submission-error {
+    border-left-color: #ca8a04;
+}
+
+.submission-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.submission-status {
+    font-weight: 600;
+}
+
+.submission-passed .submission-status {
+    color: #16a34a;
+}
+
+.submission-failed .submission-status {
+    color: #dc2626;
+}
+
+.submission-error .submission-status {
+    color: #ca8a04;
+}
+
+.submission-result {
+    background: #f8fafc;
+    border-radius: 0.5rem;
+    margin: 0.5rem 0 0;
+    max-height: 16rem;
+    overflow: auto;
+    padding: 0.6rem 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.late-badge {
+    background: #fef3c7;
+    border-radius: 999px;
+    color: #92400e;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.05rem 0.5rem;
+}
+
+/* Statistics tab — grade-distribution histogram, one colour-coded bar per section. */
+.grade-chart {
+    align-items: flex-end;
+    display: flex;
+    gap: 1rem;
+    margin: 0.5rem 0 1.25rem;
+}
+
+.grade-group {
+    align-items: center;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+}
+
+.grade-bars {
+    align-items: flex-end;
+    display: flex;
+    gap: 3px;
+    height: 180px;
+    justify-content: center;
+    width: 100%;
+}
+
+.grade-bar {
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+    position: relative;
+    width: 1.5rem;
+}
+
+.grade-bar-count {
+    color: #6b7280;
+    font-size: 0.7rem;
+    left: 50%;
+    position: absolute;
+    top: -1.1rem;
+    transform: translateX(-50%);
+}
+
+.grade-axis-label {
+    font-weight: 700;
+    margin-top: 0.4rem;
+}
+
+.chart-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.chart-legend li {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.legend-swatch {
+    border-radius: 3px;
+    display: inline-block;
+    flex: none;
+    height: 0.9rem;
+    width: 0.9rem;
+}
+
+.section-color-0 {
+    background: #2563eb;
+}
+
+.section-color-1 {
+    background: #16a34a;
+}
+
+.section-color-2 {
+    background: #ea580c;
+}
+
+.section-color-3 {
+    background: #9333ea;
+}
+
+.section-color-4 {
+    background: #0891b2;
+}
+
+.section-color-5 {
+    background: #ca8a04;
+}
+
+.section-compare-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.section-compare-links .button.is-active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.stat-list {
+    margin: 0.25rem 0 1rem;
+}
+
 .problem-actions {
     display: flex;
     flex-wrap: wrap;
@@ -430,4 +708,857 @@ header a:hover {
 
 .problem-sidebar {
     min-width: 280px;
+}
+
+
+/* Problem reordering (staff drag-and-drop) */
+
+.problem-reorder-list {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+}
+
+.problem-reorder-item {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    display: flex;
+    gap: 0.65rem;
+    margin-bottom: 0.5rem;
+    padding: 0.55rem 0.7rem;
+}
+
+.problem-reorder-item.dragging {
+    border-style: dashed;
+    opacity: 0.5;
+}
+
+.problem-reorder-handle {
+    color: #9ca3af;
+    cursor: grab;
+    flex: none;
+    font-size: 1.15rem;
+    line-height: 1;
+    padding: 0 0.15rem;
+    user-select: none;
+}
+
+.problem-reorder-handle:active {
+    cursor: grabbing;
+}
+
+.problem-reorder-title {
+    align-items: baseline;
+    color: inherit;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.problem-reorder-index {
+    color: #111827;
+    flex: none;
+    font-weight: 600;
+}
+
+.problem-reorder-name {
+    color: #6b7280;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Separator dot between the "Problem N" label and the optional custom name. */
+.problem-reorder-name::before {
+    color: #d1d5db;
+    content: "·";
+    margin: 0 0.4rem;
+}
+
+.problem-reorder-edit {
+    flex: none;
+    font-size: 0.85rem;
+}
+
+.reorder-error-msg {
+    color: #b91c1c;
+    display: none;
+}
+
+.problem-reorder.reorder-error .reorder-error-msg {
+    display: block;
+}
+
+
+/* Problem pagination (bottom of the problem page) */
+
+.problem-pager {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+}
+
+.problem-pager a,
+.problem-pager span {
+    border-radius: 0.375rem;
+    line-height: 1;
+    min-width: 1.25rem;
+    padding: 0.4rem 0.6rem;
+    text-align: center;
+}
+
+.problem-pager a {
+    border: 1px solid #d1d5db;
+    color: #374151;
+}
+
+.problem-pager a:hover {
+    background: #f3f4f6;
+    text-decoration: none;
+}
+
+.problem-pager .current {
+    background: #111827;
+    border: 1px solid #111827;
+    color: #fff;
+    font-weight: 600;
+}
+
+.problem-pager .ellipsis {
+    color: #9ca3af;
+}
+
+.problem-pager .disabled {
+    border: 1px solid #e5e7eb;
+    color: #d1d5db;
+}
+
+
+/* Generic disclosure widget (caret + sliding panel) */
+
+.disclosure {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    margin-bottom: 0.6rem;
+    overflow: hidden;
+}
+
+.disclosure-summary {
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: #111827;
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    gap: 0.55rem;
+    padding: 0.7rem 0.85rem;
+    text-align: left;
+    width: 100%;
+}
+
+.disclosure-summary:hover {
+    background: #f9fafb;
+}
+
+.disclosure-summary:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: -2px;
+}
+
+.disclosure-caret {
+    border-bottom: 0.32rem solid transparent;
+    border-left: 0.42rem solid #6b7280;
+    border-top: 0.32rem solid transparent;
+    display: inline-block;
+    flex: none;
+    transition: transform 200ms ease;
+}
+
+.disclosure:not(.collapsed) .disclosure-caret {
+    transform: rotate(90deg);
+}
+
+.disclosure-title {
+    font-weight: 600;
+}
+
+.disclosure-summary .meta {
+    margin-left: auto;
+}
+
+/* Slide: animate the grid row 0fr→1fr (see source-file disclosure for the same technique). */
+.disclosure-content {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 220ms ease;
+}
+
+.disclosure.collapsed .disclosure-content {
+    grid-template-rows: 0fr;
+}
+
+.disclosure-content-inner {
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Padding lives here, never on the overflow:hidden element above, so a collapsed panel
+   can't leak a sliver of its contents. */
+.disclosure-content-pad {
+    padding: 0.15rem 0.85rem 0.85rem;
+}
+
+
+/* Per-problem class scores inside an assignment disclosure */
+
+.problem-scores {
+    list-style: none;
+    margin: 0.3rem 0 0;
+    padding: 0;
+}
+
+.problem-score-row {
+    align-items: baseline;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+}
+
+.problem-score-row:first-child {
+    border-top: 0;
+}
+
+.problem-score-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.problem-score-value {
+    flex: none;
+    font-weight: 600;
+}
+
+.problem-score-detail {
+    color: #6b7280;
+    font-weight: 400;
+    margin-left: 0.4rem;
+}
+
+.problem-score-empty {
+    color: #9ca3af;
+}
+
+
+/* Students spreadsheet + revealable grades (course page, staff) */
+
+.students-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+}
+
+.students-table th {
+    color: #6b7280;
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.students-table tbody tr:hover {
+    background: #f9fafb;
+}
+
+/* Reserve the remove column at a constant width so the confirm-countdown label changing
+   from "Remove" to "Are you sure? (3)" to "Yes, remove" never reflows the Course grade
+   column (the table is width:100%, so a wider column would steal space from its siblings).
+   Sizing the body cell sets the whole column, so the empty header needs no rule — and this
+   only applies when a remove column exists (can_edit), not to the TA/student grade table. */
+.students-table td.roster-remove {
+    text-align: right;
+    white-space: nowrap;
+    width: 9rem;
+}
+
+.grade-toggle {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+    text-align: left;
+}
+
+.grade-toggle:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+
+.grade-placeholder {
+    color: #9ca3af;
+    letter-spacing: 0.12em;
+}
+
+.grade-value {
+    display: none;
+    font-weight: 600;
+}
+
+.student-row.revealed .grade-value {
+    display: inline;
+}
+
+.student-row.revealed .grade-placeholder {
+    display: none;
+}
+
+.export-grades {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+}
+
+.export-grades select {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.5rem;
+}
+
+
+/* Flash messages */
+
+.messages {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+}
+
+.message {
+    border-radius: 0.375rem;
+    margin-bottom: 0.5rem;
+    padding: 0.6rem 0.85rem;
+}
+
+.message.success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.message.error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+
+/* Course roster (per-role membership + management) */
+
+.roster-section {
+    margin-bottom: 1.25rem;
+}
+
+.roster-section h3 {
+    margin-bottom: 0.4rem;
+}
+
+.roster-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.roster-list li {
+    align-items: center;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    gap: 0.6rem;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+}
+
+.roster-list li:first-child {
+    border-top: 0;
+}
+
+.roster-remove button {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: #b91c1c;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0.1rem 0.3rem;
+}
+
+/* "Are you sure?" confirm states (see confirm-remove.js). */
+.js-confirm.confirm-arming {
+    color: #9ca3af;
+    cursor: default;
+}
+
+.js-confirm.confirm-armed {
+    background: #b91c1c;
+    border-radius: 0.375rem;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* Tab strip (see tabs.js). Panels are hidden until JS (or the server) marks one active. */
+.tab-nav {
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.tab-link {
+    appearance: none;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: #6b7280;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    margin-bottom: -1px;
+    padding: 0.6rem 0.9rem;
+}
+
+.tab-link:hover {
+    color: #111827;
+}
+
+.tab-link.is-active {
+    border-bottom-color: #2563eb;
+    color: #111827;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.is-active {
+    display: block;
+}
+
+.roster-add {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+.roster-add input {
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.6rem;
+}
+
+/* One-line roster inputs on the course form, with a "Upload CSV" button alongside. */
+.roster-input {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.roster-input input[type="text"] {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.roster-csv {
+    cursor: pointer;
+    flex: none;
+    white-space: nowrap;
+}
+
+
+/* Course thumbnail picker (course form) */
+
+.thumbnail-dropzone {
+    align-items: center;
+    background: #f9fafb;
+    border: 2px dashed #d1d5db;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1rem;
+    text-align: center;
+}
+
+.thumbnail-dropzone.dragover {
+    background: #eff6ff;
+    border-color: #2563eb;
+}
+
+.thumbnail-preview {
+    border-radius: 0.375rem;
+    max-height: 160px;
+    max-width: 100%;
+    object-fit: cover;
+}
+
+.thumbnail-dropzone-hint {
+    color: #6b7280;
+    font-size: 0.9rem;
+}
+
+.thumbnail-presets {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    margin-top: 0.4rem;
+}
+
+.thumbnail-preset {
+    border: 2px solid transparent;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    display: block;
+    overflow: hidden;
+    padding: 0;
+}
+
+.thumbnail-preset img {
+    aspect-ratio: 5 / 3;
+    display: block;
+    object-fit: cover;
+    width: 100%;
+}
+
+.thumbnail-preset span {
+    color: #6b7280;
+    display: block;
+    font-size: 0.8rem;
+    padding: 0.25rem;
+    text-align: center;
+}
+
+.thumbnail-preset input[type="radio"] {
+    height: 1px;
+    opacity: 0;
+    position: absolute;
+    width: 1px;
+}
+
+.thumbnail-preset:focus-within,
+.thumbnail-preset.selected {
+    border-color: #2563eb;
+}
+
+
+/* Course thumbnail display */
+
+.course-thumbnail-banner {
+    border-radius: 0.6rem;
+    display: block;
+    height: 180px;
+    margin-bottom: 0.5rem;
+    object-fit: cover;
+    width: 100%;
+}
+
+/* Course title, "taught by", and the edit button share one row to save vertical space. */
+.course-header {
+    align-items: center;
+    column-gap: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    padding: 0.6rem 0 1rem;
+    row-gap: 0.35rem;
+}
+
+.course-header h1 {
+    margin: 0;
+}
+
+.course-header .meta {
+    margin: 0;
+}
+
+.course-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.course-thumb-sm {
+    border-radius: 0.3rem;
+    height: 2rem;
+    margin-right: 0.5rem;
+    object-fit: cover;
+    vertical-align: middle;
+    width: 3.2rem;
+}
+
+.image-credit {
+    margin-top: 0.75rem;
+}
+
+
+/* Student course cards (course list) with letter-grade markers */
+
+.course-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+}
+
+.course-search {
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    flex: 1 1 16rem;
+    max-width: 28rem;
+    padding: 0.5rem 0.75rem;
+}
+
+/* Keep the grades toggle pinned to the right of the toolbar. */
+.course-toolbar .button {
+    margin-left: auto;
+}
+
+.course-search-empty {
+    margin: 0 0 1rem;
+}
+
+.course-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Cards filtered out by the search box. */
+.course-card.search-hidden {
+    display: none;
+}
+
+.course-card {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    color: inherit;
+    display: flex;
+    gap: 1.25rem;
+    padding: 1rem 1.25rem;
+}
+
+.course-card:hover {
+    border-color: #cbd5e1;
+    text-decoration: none;
+}
+
+.course-card-thumb {
+    border-radius: 0.5rem;
+    flex: none;
+    height: 96px;
+    object-fit: cover;
+    width: 150px;
+}
+
+.course-card-thumb-empty {
+    background: radial-gradient(circle at 30% 30%, #e5e7eb, #cbd5e1);
+}
+
+.course-card-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.course-card-info h2 {
+    font-size: 1.2rem;
+    margin: 0 0 0.25rem;
+}
+
+.course-card-info .meta {
+    margin: 0;
+}
+
+.course-card-grade {
+    align-items: center;
+    display: grid;
+    flex: none;
+    justify-items: center;
+    min-width: 7.5rem;
+}
+
+/* Stack the grade and its placeholder in one grid cell: the column is always as tall as
+   the grade display (the taller of the two), so revealing/hiding grades — or a different
+   letter — never changes the card's height. We swap visibility, not display, so the
+   reserved space never collapses. */
+.course-card-grade > .grade-display,
+.course-card-grade > .grade-placeholder {
+    grid-area: 1 / 1;
+}
+
+.grade-display {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    visibility: hidden;
+}
+
+.course-cards:not(.grades-hidden) .has-grade .grade-display {
+    visibility: visible;
+}
+
+.course-cards:not(.grades-hidden) .has-grade .grade-placeholder {
+    visibility: hidden;
+}
+
+.grade-letter {
+    font-size: clamp(3.5rem, 11vw, 6.25rem);
+    font-weight: 800;
+    line-height: 1;
+}
+
+.grade-score {
+    color: #6b7280;
+    font-size: 0.95rem;
+    margin-top: 0.3rem;
+}
+
+.grade-placeholder {
+    background: radial-gradient(circle at 30% 30%, #eef2f7, #cbd5e1);
+    border-radius: 50%;
+    height: 5.25rem;
+    width: 5.25rem;
+}
+
+.grade-a {
+    color: #16a34a;
+}
+
+.grade-b {
+    color: #4d7c0f;
+}
+
+.grade-c {
+    color: #ca8a04;
+}
+
+.grade-d {
+    color: #ea580c;
+}
+
+.grade-f {
+    color: #dc2626;
+}
+
+@media (max-width: 560px) {
+    .course-card-thumb {
+        height: 64px;
+        width: 88px;
+    }
+
+    .course-card-grade {
+        min-width: 5rem;
+    }
+}
+
+.course-card-thumb-wrap {
+    flex: none;
+    position: relative;
+}
+
+/* Staff course card: enrolled-student count in place of the student's grade marker.
+   Unlike .grade-display it is never hidden by the grades toggle (it isn't a grade). */
+.count-display {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+}
+
+.count-number {
+    color: #334155;
+    font-size: clamp(2.75rem, 9vw, 4.5rem);
+    font-weight: 800;
+    line-height: 1;
+}
+
+.count-label {
+    color: #6b7280;
+    font-size: 0.95rem;
+    margin-top: 0.3rem;
+}
+
+/* "Open assignments" notification bubble on a course card. */
+.open-badge {
+    align-items: center;
+    background: #f4511e;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    color: #fff;
+    display: inline-flex;
+    font-size: 0.8rem;
+    font-weight: 700;
+    height: 1.5rem;
+    justify-content: center;
+    line-height: 1;
+    min-width: 1.5rem;
+    padding: 0 0.35rem;
+    position: absolute;
+    right: -0.5rem;
+    top: -0.5rem;
+}
+
+.previous-courses {
+    margin-top: 1.25rem;
+}
+
+/* Grade-band number inputs on the course form. */
+.grade-bands-block {
+    margin-bottom: 1rem;
+}
+
+.grade-bands-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.grade-bands {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.grade-band-field {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.3rem;
+}
+
+.grade-bands input {
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.5rem;
+    width: 4rem;
 }

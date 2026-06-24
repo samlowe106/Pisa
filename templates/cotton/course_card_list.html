@@ -1,0 +1,37 @@
+<c-vars :active="None" :previous="None" :show_grades_toggle="False" empty_text="You're not part of any courses yet." />
+{% if active or previous %}
+<div class="course-toolbar">
+    <input type="search" id="course-search" class="course-search" placeholder="Search your courses…" aria-label="Search your courses by name" autocomplete="off">
+    {% if show_grades_toggle %}
+    <button type="button" class="button secondary" id="toggle-grades" aria-pressed="false">Show grades</button>
+    {% endif %}
+</div>
+<p class="meta course-search-empty" id="course-search-empty" hidden>No courses match your search.</p>
+{% if active %}
+<div class="course-cards grades-hidden">
+    {% for card in active %}<c-course-card :card="card" />{% endfor %}
+</div>
+{% else %}
+<p class="meta">You have no active courses.</p>
+{% endif %}
+{% if previous %}
+<div class="disclosure collapsed previous-courses">
+    <button type="button" class="disclosure-summary" aria-expanded="false" aria-controls="previous-courses">
+        <span class="disclosure-caret" aria-hidden="true"></span>
+        <span class="disclosure-title">Previous courses</span>
+        <span class="meta">{{ previous|length }}</span>
+    </button>
+    <div id="previous-courses" class="disclosure-content">
+        <div class="disclosure-content-inner">
+            <div class="disclosure-content-pad">
+                <div class="course-cards grades-hidden">
+                    {% for card in previous %}<c-course-card :card="card" />{% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% else %}
+<c-card><p>{{ empty_text }}</p></c-card>
+{% endif %}

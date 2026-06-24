@@ -1,13 +1,75 @@
 {% extends 'homework/base.html' %}
+{% load static %}
 
 {% block title %}{% if object %}Edit{% else %}Create{% endif %} Course – Pisa{% endblock %}
+
+{% block extra_head %}
+<script src="{% static 'homework/js/course-thumbnail.js' %}" defer></script>
+<script src="{% static 'homework/js/course-roster.js' %}" defer></script>
+{% endblock %}
 
 {% block content %}
 {% with h=object|yesno:"Edit Course,Create Course" %}<c-page-header :title="h" />{% endwith %}
 <c-card>
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
-        <c-form-fields :form="form" />
+        {% for error in form.non_field_errors %}<p class="alert">{{ error }}</p>{% endfor %}
+
+        {% for field in form %}
+            {% if field.name == 'thumbnail' or field.name == 'thumbnail_preset' %}
+            {% elif field.name == 'instructors' or field.name == 'tas' or field.name == 'students' %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                <div class="roster-input">
+                    {{ field }}
+                    <label class="roster-csv button secondary">Upload CSV<input type="file" accept=".csv,text/csv,text/plain" data-roster-target="{{ field.id_for_label }}" hidden></label>
+                </div>
+                {% if field.help_text %}<p class="meta">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="alert">{{ error }}</p>{% endfor %}
+            </div>
+            {% elif field.name == 'grade_b_min' or field.name == 'grade_c_min' or field.name == 'grade_d_min' %}
+            {% elif field.name == 'grade_a_min' %}
+            <div class="grade-bands-block">
+                <label class="grade-bands-label">Grade bands — minimum % per letter (F is below D)</label>
+                <div class="grade-bands">
+                    {% for bf in form %}{% if bf.name == 'grade_a_min' or bf.name == 'grade_b_min' or bf.name == 'grade_c_min' or bf.name == 'grade_d_min' %}<span class="grade-band-field"><label for="{{ bf.id_for_label }}">{{ bf.label }} ≥</label>{{ bf }}</span>{% endif %}{% endfor %}
+                </div>
+                {% for bf in form %}{% if bf.name == 'grade_a_min' or bf.name == 'grade_b_min' or bf.name == 'grade_c_min' or bf.name == 'grade_d_min' %}{% for error in bf.errors %}<p class="alert">{{ error }}</p>{% endfor %}{% endif %}{% endfor %}
+            </div>
+            {% else %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="meta">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="alert">{{ error }}</p>{% endfor %}
+            </div>
+            {% endif %}
+        {% endfor %}
+
+        <div class="field">
+            <label>Thumbnail</label>
+            <label class="thumbnail-dropzone" id="thumbnail-dropzone">
+                {{ form.thumbnail }}
+                <img class="thumbnail-preview" id="thumbnail-preview" alt="Thumbnail preview"
+                     src="{{ course.thumbnail_url }}"{% if not course.thumbnail_url %} hidden{% endif %}>
+                <span class="thumbnail-dropzone-hint">Drag &amp; drop an image here, or use the button above.</span>
+            </label>
+            {% for error in form.thumbnail.errors %}<p class="alert">{{ error }}</p>{% endfor %}
+
+            {% if form.presets %}
+            <p class="meta">…or pick a preset:</p>
+            <div class="thumbnail-presets">
+                {% for p in form.presets %}
+                <label class="thumbnail-preset{% if form.thumbnail_preset.value == p.key %} selected{% endif %}">
+                    <input type="radio" name="thumbnail_preset" value="{{ p.key }}"{% if form.thumbnail_preset.value == p.key %} checked{% endif %}>
+                    <img src="{{ p.url }}" alt="{{ p.label }}">
+                    <span>{{ p.label }}{% if p.attribution.license %} · {{ p.attribution.license }}{% endif %}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
         <button class="button" type="submit">Save course</button>
     </form>
 </c-card>

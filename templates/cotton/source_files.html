@@ -3,17 +3,22 @@
 <div class="field">
     <label>Imported Lean source files</label>
     {% for source_file in source_files %}
-    <div class="imported-source-file collapsed">
-        <div class="imported-source-file-header">
-            <div>
-                <strong>{{ source_file.title }}</strong>
-                {% if user.is_staff %}
-                <span class="meta">({{ source_file.visible|yesno:"Visible,Hidden" }})</span>
-                {% endif %}
+    <div class="disclosure collapsed">
+        <button type="button" class="disclosure-summary" aria-expanded="false" aria-controls="imported-source-{{ source_file.pk }}">
+            <span class="disclosure-caret" aria-hidden="true"></span>
+            <span class="disclosure-title">{{ source_file.title }}</span>
+            {% if source_file.show_visibility %}
+            <span class="meta">({% if source_file.visible_here %}Visible{% else %}Hidden{% endif %})</span>
+            {% endif %}
+        </button>
+        <div id="imported-source-{{ source_file.pk }}" class="disclosure-content">
+            <div class="disclosure-content-inner">
+                <div class="disclosure-content-pad">
+                    <textarea class="read-only-code" readonly>{{ source_file.content }}</textarea>
+                    <button type="button" class="source-file-hide">Hide</button>
+                </div>
             </div>
-            <button type="button" class="toggle-import" aria-expanded="false" aria-controls="imported-source-{{ source_file.pk }}">Show</button>
         </div>
-        <textarea id="imported-source-{{ source_file.pk }}" class="read-only-code" readonly>{{ source_file.content }}</textarea>
     </div>
     {% endfor %}
 </div>

@@ -3,24 +3,26 @@
 {% block title %}Login – Pisa{% endblock %}
 
 {% block content %}
-<c-page-header title="Login">
-    <p class="meta">Sign in to access assignments and run Lean problems.</p>
-</c-page-header>
-<c-card>
-    <form method="post" action="{% url 'login' %}">
-        {% csrf_token %}
-        {% if form.errors %}
-        <div class="alert">Please correct the error below.</div>
-        {% endif %}
-        <div class="field">
-            <label for="id_username">Username</label>
-            {{ form.username }}
-        </div>
-        <div class="field">
-            <label for="id_password">Password</label>
-            {{ form.password }}
-        </div>
-        <button class="button" type="submit">Login</button>
-    </form>
-</c-card>
+<div class="auth">
+    <c-page-header title="Login">
+        <p class="meta">Sign in to access assignments and run Lean problems.</p>
+    </c-page-header>
+    <c-card>
+        <form method="post" action="{% url 'login' %}">
+            {% csrf_token %}
+            {% if form.errors %}
+            <div class="alert">Please correct the error below.</div>
+            {% endif %}
+            <div class="field">
+                <label for="id_username">Username</label>
+                {{ form.username }}
+            </div>
+            <div class="field">
+                <label for="id_password">Password</label>
+                {{ form.password }}
+            </div>
+            <button class="button" type="submit">Login</button>
+        </form>
+    </c-card>
+</div>
 {% endblock %}

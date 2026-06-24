@@ -1,40 +1,21 @@
 {% extends 'homework/base.html' %}
+{% load static %}
 
 {% block title %}Courses – Pisa{% endblock %}
 
+{% block extra_head %}
+<script src="{% static 'homework/js/disclosure.js' %}" defer></script>
+<script src="{% static 'homework/js/course-list-grades.js' %}" defer></script>
+<script src="{% static 'homework/js/course-search.js' %}" defer></script>
+{% endblock %}
+
 {% block content %}
 <c-page-header title="Courses">
-    <p class="meta">{% if user.is_staff %}Manage the courses you teach.{% else %}Browse available classes and enroll in the ones you want.{% endif %}</p>
-    {% if user.is_staff %}
+    <p class="meta">Your ongoing and past courses.</p>
+    {% if is_site_admin %}
     <a class="button" href="{% url 'homework:course_create' %}">Create course</a>
     {% endif %}
 </c-page-header>
-<c-card>
-    {% if courses %}
-    <table>
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Description</th>
-                {% if user.is_staff %}<th>Students</th>{% else %}<th>Status</th>{% endif %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for course in courses %}
-            <tr>
-                <td><a href="{% url 'homework:course_detail' slug=course.slug %}">{{ course.title }}</a></td>
-                <td>{{ course.description|truncatechars:120 }}</td>
-                {% if user.is_staff %}
-                <td>{{ course.students.count }}</td>
-                {% else %}
-                <td>{% if user in course.students.all %}Enrolled{% else %}Open{% endif %}</td>
-                {% endif %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>{% if user.is_staff %}You haven't created any courses yet.{% else %}There are no courses available yet.{% endif %}</p>
-    {% endif %}
-</c-card>
+
+<c-course-card-list :active="active_cards" :previous="previous_cards" :show_grades_toggle="show_grades_toggle" />
 {% endblock %}

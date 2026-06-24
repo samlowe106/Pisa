@@ -20,14 +20,14 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "pisa.settings")
 # consumers that touch models.
 django_asgi_app = get_asgi_application()
 
-import homework.routing  # noqa: E402
+import apps.homework.routing  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         # Session-cookie auth (scope["user"]) + same-origin check for the Lean LSP socket.
         "websocket": AllowedHostsOriginValidator(
-            AuthMiddlewareStack(URLRouter(homework.routing.websocket_urlpatterns))
+            AuthMiddlewareStack(URLRouter(apps.homework.routing.websocket_urlpatterns))
         ),
     }
 )

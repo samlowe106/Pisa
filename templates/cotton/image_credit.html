@@ -1,0 +1,5 @@
+<c-vars :credit="None" label="Image" />
+{% if credit %}
+<p class="image-credit meta">{{ label }}:
+    {% if credit.source_url %}<a href="{{ credit.source_url }}" target="_blank" rel="noopener noreferrer">{{ credit.title|default:"source" }}</a>{% elif credit.title %}{{ credit.title }}{% else %}image{% endif %}{% if credit.author %} by {% if credit.author_url %}<a href="{{ credit.author_url }}" target="_blank" rel="noopener noreferrer">{{ credit.author }}</a>{% else %}{{ credit.author }}{% endif %}{% endif %}{% if credit.license %} ({% if credit.license_url %}<a href="{{ credit.license_url }}" target="_blank" rel="noopener noreferrer">{{ credit.license }}</a>{% else %}{{ credit.license }}{% endif %}){% endif %}</p>
+{% endif %}

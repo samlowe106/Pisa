@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 import os
+import shlex
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -21,6 +23,15 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    """Read a boolean env var. Accepts 1/true/yes/on (any case); everything else is False.
+    (Plain ``bool(os.environ.get(...))`` is a trap: ``bool("False")`` is ``True``.)"""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
@@ -28,24 +39,46 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ["SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = bool(os.environ.get("DEBUG", False))
+DEBUG = env_bool("DEBUG", False)
 
-# Hosts/domains the site may be served on. Set ALLOWED_HOSTS (comma-separated) in the
-# environment for real deployments (e.g. Railway: your-app.up.railway.app). In DEBUG we
-# default to the usual local hosts so `docker compose up` works at localhost, 127.0.0.1,
-# or 0.0.0.0.
+# Hosts/domains the site may be served on. Self-hosters set PISA_DOMAIN (the single public
+# hostname, e.g. lean.school.edu); ALLOWED_HOSTS (comma-separated) is also honoured for
+# multi-host setups. In DEBUG we default to the usual local hosts so `docker compose up`
+# works at localhost, 127.0.0.1, or 0.0.0.0.
+PISA_DOMAIN = os.environ.get("PISA_DOMAIN", "").strip()
 ALLOWED_HOSTS: list[str] = [
     host.strip()
     for host in os.environ.get("ALLOWED_HOSTS", "").split(",")
     if host.strip()
 ]
+if PISA_DOMAIN:
+    ALLOWED_HOSTS.append(PISA_DOMAIN)
 if DEBUG and not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]
+
+# Behind HTTPS on a custom domain, Django needs the site's own origin trusted for POSTs.
+CSRF_TRUSTED_ORIGINS = [f"https://{PISA_DOMAIN}"] if PISA_DOMAIN else []
+
+# Production hardening (only when DEBUG is off). The app runs behind a TLS-terminating proxy
+# (the bundled Caddy), which forwards X-Forwarded-Proto so Django knows the request is secure.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # HSTS is opt-in (it's sticky — a wrong value can lock a domain out of HTTP). Set
+    # SECURE_HSTS_SECONDS once you're confident HTTPS is permanent.
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
+    SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", False)
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    # Must be first (Channels 4): provides the ASGI `runserver` so the dev server actually
+    # serves WebSockets. Without it, runserver is plain WSGI and `/ws/...` 404s.
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -54,7 +87,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django_cotton.apps.SimpleAppConfig",
     "channels",
-    "homework",
+    "apps.homework",
 ]
 
 ASGI_APPLICATION = "pisa.asgi.application"
@@ -68,6 +101,9 @@ LEAN_LSP_TIMEOUT = int(os.environ.get("LEAN_LSP_TIMEOUT", "60"))
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static files in production (DEBUG off) without a separate web server;
+    # in DEBUG it defers to Django's staticfiles app. Must sit right after SecurityMiddleware.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "csp.middleware.CSPMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -96,7 +132,7 @@ CONTENT_SECURITY_POLICY = {
             "ws:",
             "wss:",
         ],  # Lean LSP websocket (channels/daphne)
-        "img-src": ["'self'", "data:"],
+        "img-src": ["'self'", "data:", "blob:"],  # blob: for the upload preview
         "font-src": ["'self'", "data:"],
         "object-src": ["'none'"],
         "base-uri": ["'self'"],
@@ -130,6 +166,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.homework.context_processors.roles",
             ],
         },
     },
@@ -187,8 +224,27 @@ STATIC_URL = "static/"
 # The project keeps its assets in a top-level static/ dir (not per-app), so it must be
 # registered explicitly for the finders to serve/collect it.
 STATICFILES_DIRS = [BASE_DIR / "static"]
-# Target for `collectstatic` in production (serve via WhiteNoise/CDN when DEBUG is off).
+# Target for `collectstatic`; WhiteNoise serves these directly when DEBUG is off.
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# WhiteNoise compresses and fingerprints collected static for far-future caching.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
+# Tests don't run collectstatic, so the manifest backend would raise on every {% static %}.
+# Fall back to plain static storage when running the test suite.
+if "test" in sys.argv:
+    STORAGES["staticfiles"][
+        "BACKEND"
+    ] = "django.contrib.staticfiles.storage.StaticFilesStorage"
+
+# User uploads (e.g. course thumbnails). Served from the same origin, so the CSP `img-src`
+# 'self' already covers them; in production serve /media/ via the web server.
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -198,6 +254,104 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LEAN_EXECUTABLE = os.environ.get("LEAN_EXECUTABLE", None)
 LEAN_TIMEOUT = int(os.environ.get("LEAN_TIMEOUT", "60"))
 
+# --- Lean sandboxing (apps/homework/sandbox.py) ----------------------------------------
+# Student-submitted Lean is untrusted code (elaboration can run IO), so every Lean process is
+# launched with a stripped environment, POSIX resource limits, and its own process group.
+# Set LEAN_SANDBOX_ENABLED=False to turn this off (not recommended).
+LEAN_SANDBOX_ENABLED = env_bool("LEAN_SANDBOX_ENABLED", True)
+# Env var names (regex, case-insensitive) to drop before running Lean. The defaults strip the
+# usual secrets while keeping HOME/PATH/ELAN_HOME so the toolchain still resolves.
+LEAN_SANDBOX_DENY_ENV = [
+    pattern
+    for pattern in os.environ.get("LEAN_SANDBOX_DENY_ENV", "").split(",")
+    if pattern.strip()
+] or [
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "TOKEN",
+    "PRIVATE",
+    "CREDENTIAL",
+    "DATABASE",
+    "DJANGO_SUPERUSER",
+]
+# Optional strict allowlist of env var names; if set, ONLY these pass through (overrides the
+# denylist). Use if you want to hand Lean the bare minimum.
+LEAN_SANDBOX_ALLOW_ENV = [
+    name.strip()
+    for name in os.environ.get("LEAN_SANDBOX_ALLOW_ENV", "").split(",")
+    if name.strip()
+]
+# POSIX rlimits for a Lean process (0 = unset). CPU seconds defaults to 4x LEAN_TIMEOUT (a
+# backstop — the wall-clock timeout is the primary guard). Memory/file-size/process caps are
+# off by default; tune them per workload, or prefer container limits / LEAN_SANDBOX_WRAPPER.
+LEAN_SANDBOX_CPU_SECONDS = int(os.environ.get("LEAN_SANDBOX_CPU_SECONDS", "0"))
+LEAN_SANDBOX_MEMORY_MB = int(os.environ.get("LEAN_SANDBOX_MEMORY_MB", "0"))
+LEAN_SANDBOX_FSIZE_MB = int(os.environ.get("LEAN_SANDBOX_FSIZE_MB", "0"))
+LEAN_SANDBOX_MAX_PROCESSES = int(os.environ.get("LEAN_SANDBOX_MAX_PROCESSES", "0"))
+# External sandbox runner prepended to the Lean command for network / filesystem / syscall
+# isolation (Layer 2). ON BY DEFAULT via bubblewrap: a new network + pid + ipc namespace (no
+# network), the whole filesystem read-only, and only the per-execution temp dir ({workdir},
+# substituted by sandbox.wrap_argv) writable. bubblewrap is installed in the image; running it
+# inside Docker needs the relaxed seccomp profile the compose files set
+# (`security_opt: ["seccomp:unconfined"]`). Set LEAN_SANDBOX_WRAPPER="" to disable (e.g. on a
+# host without bubblewrap — but then untrusted Lean keeps filesystem/network access).
+LEAN_SANDBOX_WRAPPER = shlex.split(
+    os.environ.get(
+        "LEAN_SANDBOX_WRAPPER",
+        "bwrap --unshare-all --die-with-parent --new-session "
+        "--ro-bind / / --dev /dev --proc /proc --tmpfs /tmp "
+        "--bind {workdir} {workdir} --chdir {workdir}",
+    )
+)
+
+# --- Logging ---------------------------------------------------------------------------
+# Everything goes to the console (captured by Docker / journald). Level via LOG_LEVEL.
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "{asctime} {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "standard"},
+    },
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        # Surfaces 5xx tracebacks (and 4xx at DEBUG) without the rest of django at DEBUG.
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "apps.homework": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
+
+# --- Error monitoring (optional) -------------------------------------------------------
+# Set SENTRY_DSN to turn on Sentry (the Django integration auto-instruments). Off otherwise.
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=os.environ.get(
+            "SENTRY_ENVIRONMENT", "development" if DEBUG else "production"
+        ),
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0")),
+        send_default_pii=False,
+    )
+
 LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "homework:dashboard"
+LOGIN_REDIRECT_URL = "homework:course_list"
 LOGOUT_REDIRECT_URL = "login"

@@ -117,16 +117,17 @@ MIDDLEWARE = [
 # load scripts/styles/etc. from, so an injected or compromised external resource
 # (e.g. the polyfill.io supply-chain attack) is blocked at runtime.
 #
-# NOTE: 'unsafe-inline' is kept for script/style because the app still uses inline
-# <script> blocks and inline event handlers (onsubmit/onclick). The external-host
-# allowlist below still fully applies. Once the inline JS is extracted (todo #5),
-# switch those handlers to addEventListener and replace 'unsafe-inline' with
-# per-request nonces (request.csp_nonce) for stricter protection.
+# No 'unsafe-inline': all JavaScript is in external modules under static/homework/js/ and all
+# styling is in external CSS — there are no inline <script> blocks, on*= event handlers, or
+# style="" attributes in the templates. So an injected inline <script>/<style> is refused by the
+# browser, which is the main XSS protection CSP provides. Keep it that way: new behaviour goes in
+# a static .js module (read server data from data-* attributes), not an inline <script>; dynamic
+# styling is applied via el.style.* from JS (see static/homework/js/grade-bars.js), not style="".
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
         "default-src": ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        "script-src": ["'self'", "https://cdnjs.cloudflare.com"],
+        "style-src": ["'self'", "https://cdnjs.cloudflare.com"],
         "connect-src": [
             "'self'",
             "ws:",

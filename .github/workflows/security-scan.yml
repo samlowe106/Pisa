@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly (Mon 06:00 UTC). Dependency CVEs are disclosed over time, so re-scan unchanged
+    # code on a cadence — not only when something is pushed.
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
@@ -34,3 +38,22 @@ jobs:
         with:
           sarif_file: results.sarif
           category: external-assets
+
+  audit-dependencies:
+    name: Audit dependencies for known CVEs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      # Audit the locked *production* dependencies (the set actually shipped, dev tooling
+      # excluded). --frozen fails if the lockfile is stale rather than silently resolving anew.
+      - name: Export locked production dependencies
+        run: uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements.txt
+
+      # Fails the job if any dependency has a known vulnerability. For an advisory with no fix
+      # available yet, accept it explicitly with `--ignore-vuln <ID>`.
+      - name: pip-audit
+        run: uvx pip-audit -r requirements.txt

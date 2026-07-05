@@ -9,6 +9,7 @@
 <script src="{% static 'homework/js/confirm-remove.js' %}" defer></script>
 {% if is_course_staff %}
 <script src="{% static 'homework/js/course-grades.js' %}" defer></script>
+<script src="{% static 'homework/js/grade-bars.js' %}" defer></script>
 {% endif %}
 {% endblock %}
 
@@ -263,7 +264,7 @@
                 <div class="grade-group">
                     <div class="grade-bars">
                         {% for bar in group.bars %}
-                        <div class="grade-bar {{ bar.color_class }}" style="height: {{ bar.height|floatformat:0 }}%" title="{{ bar.label }} — {{ group.letter }}: {{ bar.count }}">
+                        <div class="grade-bar {{ bar.color_class }}" data-height="{{ bar.height|floatformat:0 }}" title="{{ bar.label }} — {{ group.letter }}: {{ bar.count }}">
                             {% if bar.count %}<span class="grade-bar-count">{{ bar.count }}</span>{% endif %}
                         </div>
                         {% endfor %}

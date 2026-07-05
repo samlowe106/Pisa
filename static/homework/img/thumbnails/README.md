@@ -3,9 +3,25 @@
 Drop image files (`.jpg`, `.png`, `.svg`, `.webp`, `.gif`) into this directory and they show up
 automatically in the course-form thumbnail picker, keyed by filename.
 
-## Attribution (e.g. for Wikimedia Commons images)
+## From Wikimedia Commons (automated)
 
-To credit an image, add a sidecar JSON file with the **same name** next to it
+To add a Commons image with the image + sidecar generated for you:
+
+```sh
+manage.py fetch_commons_thumbnail "https://commons.wikimedia.org/wiki/File:Mitosis.jpg"
+# several at once, a custom size, or a preview:
+manage.py fetch_commons_thumbnail <url> <url> ... --width 1000
+manage.py fetch_commons_thumbnail <url> --width 1600 --height 360 --metric l1 --dry-run
+```
+
+It downloads the image sized to `--width` (default 1000 px; Commons only serves a fixed set of
+thumbnail widths, so it fetches the nearest one and downscales locally to the exact size) and
+writes the attribution sidecar below from the file's Commons metadata. See
+`apps/homework/management/commands/fetch_commons_thumbnail.py`.
+
+## Attribution (manual)
+
+To credit an image by hand, add a sidecar JSON file with the **same name** next to it
 (`mitosis.jpg` → `mitosis.json`). Every field is optional:
 
 ```json

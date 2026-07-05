@@ -39,20 +39,18 @@ repos:
       - id: black
         args: [--safe]
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v2.1.0"
-    hooks:
-      - id: mypy
-        args:
-          [
-            --no-strict-optional,
-            --ignore-missing-imports,
-            --install-types,
-            --non-interactive,
-          ]
-
   - repo: local
     hooks:
+      # mypy runs from the project venv (language: system) so the django-stubs plugin can
+      # import pisa.settings + the models. SECRET_KEY is only needed to import settings; its
+      # value is irrelevant to type checking. pass_filenames: false → always check the whole
+      # package, so a change in one module is re-checked against everything that imports it.
+      - id: mypy
+        name: mypy (django-stubs)
+        entry: env SECRET_KEY=mypy-typecheck uv run mypy apps pisa
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: scan-external-assets
         name: Scan templates for unsafe external assets
         entry: python scripts/scan_external_assets.py

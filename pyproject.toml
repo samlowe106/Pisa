@@ -29,6 +29,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "coverage[toml]>=7.0",
+    "django-stubs[compatible-mypy]>=6.0.6",
     "pre-commit>=4.6.0",
 ]
 
@@ -57,3 +58,28 @@ omit = [
 show_missing = true
 # No `fail_under` yet: the suite has 0 tests, so a coverage gate would fail CI.
 # Raise this once a baseline test suite exists.
+
+[tool.mypy]
+# django-stubs teaches mypy about managers (.objects), field descriptors (a CharField is a
+# str at runtime), and QuerySet types — so mypy actually understands the ORM instead of
+# treating it as Any. Kept otherwise lenient (no strict-optional) to match prior behaviour;
+# tighten later by turning on strict_optional / check_untyped_defs.
+plugins = ["mypy_django_plugin.main"]
+ignore_missing_imports = true
+strict_optional = false
+exclude = ['/migrations/']
+
+[tool.django-stubs]
+django_settings_module = "pisa.settings"
+
+[tool.ruff.lint]
+# Ruff's defaults (E4/E7/E9/F) already keep *module-level* imports at the top of the file
+# (E402). PLC0415 extends that to forbid imports inside functions/methods, so every import
+# lives at the top of its file.
+extend-select = ["PLC0415"]
+
+[tool.ruff.lint.per-file-ignores]
+# Django's stock manage.py imports inside a try/except on purpose: the point is to catch the
+# ImportError and print a "did you forget to activate your virtualenv?" hint. Hoisting the import
+# to module level would turn that into a bare traceback, so PLC0415 is a false positive here.
+"manage.py" = ["PLC0415"]

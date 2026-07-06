@@ -11,6 +11,7 @@ DB access happens on a worker thread (``database_sync_to_async``), so these must
 open transaction would hide the fixtures from the consumer.
 """
 
+from channels.db import database_sync_to_async
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.test import TransactionTestCase, override_settings
@@ -145,8 +146,6 @@ class LeanSocketAccessTests(TransactionTestCase):
         self.assertNotIn(self.m["outsider"].id, consumers._LEAN_HOLDERS)
 
     async def test_student_cannot_reach_a_draft_problem(self):
-        from channels.db import database_sync_to_async
-
         problem = await database_sync_to_async(self._draft_problem)()
         communicator, connected = await _open_for(self.m["student"], problem.pk)
         self.assertFalse(

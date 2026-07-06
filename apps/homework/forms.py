@@ -8,8 +8,8 @@ from .models import (
     LeanSourceFile,
     Problem,
     ProblemBlock,
-    available_thumbnail_presets,
 )
+from .thumbnails import available_thumbnail_presets
 
 User = get_user_model()
 

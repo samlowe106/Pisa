@@ -1,4 +1,4 @@
-"""Anti-cheat / grading tests (apps/homework/lean_policy.py + views/problems.py).
+"""Anti-cheat / grading tests (apps/homework/lean_policy.py + lean_runner.py).
 
 Two enforcement layers are exercised:
 
@@ -13,12 +13,12 @@ Most tests need neither Lean nor a DB; the backstop tests use real Lean (skip ot
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.homework import lean_policy
-from apps.homework.models import Problem, ProblemBlock, Submission
-from apps.homework.views.problems import (
+from apps.homework.lean_runner import (
     assemble_lean_submission_source,
     grade_lean_submission,
     sanitize_lean_output,
 )
+from apps.homework.models import Problem, ProblemBlock, Submission
 
 from .utils import make_role_matrix, requires_lean
 

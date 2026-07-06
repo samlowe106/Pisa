@@ -1,4 +1,5 @@
-from .models import Course, is_student_anywhere
+from .models import Course
+from .selectors import is_student_anywhere
 
 
 def roles(request):

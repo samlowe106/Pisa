@@ -1,14 +1,17 @@
+from collections.abc import Callable
+
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.views.generic import TemplateView, View
 
+from ..exports import export_submissions_csv, export_submissions_excel
 from ..models import (
     Assignment,
     Course,
     Submission,
 )
+from ..selectors import _staff_course_ids
 
 
 class GradesView(LoginRequiredMixin, TemplateView):
@@ -23,11 +26,7 @@ class GradesView(LoginRequiredMixin, TemplateView):
             assignments = Assignment.objects.all()
             is_staff_view = True
         else:
-            staff_course_ids = list(
-                Course.objects.filter(Q(instructors=user) | Q(tas=user)).values_list(
-                    "id", flat=True
-                )
-            )
+            staff_course_ids = _staff_course_ids(user)
             is_staff_view = bool(staff_course_ids)
             if is_staff_view:
                 submissions = Submission.objects.filter(
@@ -53,31 +52,27 @@ class GradesView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class ExportGradesCSVView(LoginRequiredMixin, View):
-    """Export course grades as CSV (course instructors and site admins only — not TAs)."""
+class BaseExportGradesView(LoginRequiredMixin, View):
+    """Export a course's grades (course instructors and site admins only — not TAs).
+
+    Subclasses set ``export_func`` to the exports.py function for their format.
+    """
+
+    export_func: Callable | None = None  # staticmethod(export_submissions_*)
 
     def get(self, request, course_slug):
-        from ..exports import export_submissions_csv
-
         course = get_object_or_404(Course, slug=course_slug)
         if not course.is_instructor(request.user):
             raise PermissionDenied
         submissions = Submission.objects.filter(
             problem__assignment__course=course
         ).order_by("-created_at")
-        return export_submissions_csv(submissions)
+        return self.export_func(submissions)
 
 
-class ExportGradesExcelView(LoginRequiredMixin, View):
-    """Export course grades as Excel (course instructors and site admins only — not TAs)."""
+class ExportGradesCSVView(BaseExportGradesView):
+    export_func = staticmethod(export_submissions_csv)
 
-    def get(self, request, course_slug):
-        from ..exports import export_submissions_excel
 
-        course = get_object_or_404(Course, slug=course_slug)
-        if not course.is_instructor(request.user):
-            raise PermissionDenied
-        submissions = Submission.objects.filter(
-            problem__assignment__course=course
-        ).order_by("-created_at")
-        return export_submissions_excel(submissions)
+class ExportGradesExcelView(BaseExportGradesView):
+    export_func = staticmethod(export_submissions_excel)

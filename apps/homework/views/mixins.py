@@ -1,4 +1,7 @@
+from collections.abc import Callable
+
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.forms.models import BaseInlineFormSet
 
 from ..models import Course
 
@@ -19,6 +22,21 @@ class InstructorAnywhereMixin(UserPassesTestMixin):
         return bool(user.is_staff) or Course.objects.filter(instructors=user).exists()
 
 
+class ResolvedObjectMixin:
+    """``get_object()`` for views whose object is found via nested URL kwargs, not pk/slug.
+
+    Set ``object_resolver = staticmethod(resolver)`` where ``resolver(queryset, url_kwargs)``
+    returns the object (404ing itself as appropriate).
+    """
+
+    object_resolver: Callable | None = None
+
+    def get_object(self, queryset=None):
+        return self.object_resolver(
+            queryset if queryset is not None else self.get_queryset(), self.kwargs
+        )
+
+
 class FormsetMixin:
     """Manage one related inline formset alongside the main form on a Create/Update view.
 
@@ -29,7 +47,7 @@ class FormsetMixin:
     ``form_valid`` before calling ``super().form_valid(form)``.
     """
 
-    formset_class = None
+    formset_class: type[BaseInlineFormSet] | None = None
     formset_context_name = "formset"
 
     def get_formset(self):

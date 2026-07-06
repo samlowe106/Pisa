@@ -1,0 +1,23 @@
+<c-vars :course="None" heading="" role="" :members="None" :can_manage="False" empty="" add_label="" />
+<div class="roster-section">
+    <h3>{{ heading }}</h3>
+    {% if members %}
+    <ul class="roster-list">
+        {% for m in members %}
+        <li>
+            <span>{{ m.name }}</span>
+            {% if can_manage %}
+            <span class="roster-remove">
+                <c-roster-remove-form :course="course" :role="role" :user_id="m.id" />
+            </span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="meta">{{ empty }}</p>
+    {% endif %}
+    {% if can_manage %}
+    <c-roster-add-form :course="course" :role="role" :label="add_label" />
+    {% endif %}
+</div>

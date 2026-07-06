@@ -1,0 +1,7 @@
+<c-vars :course="None" role="" label="" />
+<form class="roster-add" method="post" action="{% url 'homework:course_add_member' slug=course.slug %}">
+    {% csrf_token %}
+    <input type="hidden" name="role" value="{{ role }}">
+    <input type="text" name="identifier" placeholder="username or email" aria-label="{{ label }} by username or email">
+    <button class="button secondary" type="submit">{{ label }}</button>
+</form>

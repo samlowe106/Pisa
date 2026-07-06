@@ -7,7 +7,7 @@ import unittest
 from django.contrib.auth import get_user_model
 
 from apps.homework.models import Assignment, Course, Problem, ProblemBlock
-from apps.homework.views.problems import get_lean_executable
+from apps.homework.lean_runner import get_lean_executable
 
 User = get_user_model()
 

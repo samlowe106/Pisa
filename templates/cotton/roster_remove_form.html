@@ -1,0 +1,7 @@
+<c-vars :course="None" role="" user_id="" />
+<form method="post" action="{% url 'homework:course_remove_member' slug=course.slug %}">
+    {% csrf_token %}
+    <input type="hidden" name="role" value="{{ role }}">
+    <input type="hidden" name="user_id" value="{{ user_id }}">
+    <button type="submit" class="js-confirm">Remove</button>
+</form>

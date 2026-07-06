@@ -5,11 +5,13 @@ import importlib
 import os
 from unittest import mock
 
+import pisa.settings as settings_module
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, SimpleTestCase, TestCase
 
 from apps.homework.context_processors import roles
-from apps.homework.views.courses import course_cards_for
+from apps.homework.models import Course
+from apps.homework.reporting import course_cards_for
 from pisa.settings import env_bool
 
 from .utils import make_role_matrix
@@ -52,8 +54,6 @@ class SelfHostSettingsTests(SimpleTestCase):
     """
 
     def setUp(self):
-        import pisa.settings as settings_module
-
         self.module = settings_module
         self.addCleanup(importlib.reload, settings_module)
 
@@ -82,8 +82,6 @@ class SelfHostSettingsTests(SimpleTestCase):
 
 class CardsQueryCountTests(TestCase):
     def test_admin_landing_page_is_not_n_plus_1(self):
-        from apps.homework.models import Course
-
         admin = make_role_matrix()["admin"]
         for i in range(5):
             Course.objects.create(title=f"C{i}", slug=f"c{i}")

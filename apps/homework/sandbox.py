@@ -1,7 +1,7 @@
 """Defensive execution of untrusted Lean.
 
 Student-submitted Lean is arbitrary code (elaboration can run IO via `#eval`/metaprograms),
-so every Lean process — the one-shot grader (``views.problems.run_lean_process``) and the
+so every Lean process — the one-shot grader (``lean_runner.run_lean_process``) and the
 long-lived LSP server (``consumers.LeanLSPConsumer``) — is launched through here.
 
 Two layers, both gated by ``LEAN_SANDBOX_ENABLED``:

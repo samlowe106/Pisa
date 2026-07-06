@@ -1,0 +1,116 @@
+{# Staff-only statistics tab: grade distribution, per-assignment breakdown, section comparison. #}
+        <c-card heading="Grade distribution by section">
+            {% if grade_sections %}
+            <div class="grade-chart">
+                {% for group in grade_chart %}
+                <div class="grade-group">
+                    <div class="grade-bars">
+                        {% for bar in group.bars %}
+                        <div class="grade-bar {{ bar.color_class }}" data-height="{{ bar.height|floatformat:0 }}" title="{{ bar.label }} — {{ group.letter }}: {{ bar.count }}">
+                            {% if bar.count %}<span class="grade-bar-count">{{ bar.count }}</span>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="grade-axis-label">{{ group.letter }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            <ul class="chart-legend">
+                {% for s in grade_sections %}
+                <li><span class="legend-swatch {{ s.color_class }}" aria-hidden="true"></span>{{ s.course.display_name }} — {{ s.num_students }} student{{ s.num_students|pluralize }}{% if s.ungraded %}, {{ s.ungraded }} with no graded work{% endif %}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="meta">No sections to chart yet.</p>
+            {% endif %}
+        </c-card>
+
+        <c-card heading="Per-assignment breakdown">
+            {% if assignment_stats %}
+            <table>
+                <thead>
+                    <tr><th>Assignment</th><th>Submitted</th><th>Mean score (of those who submitted)</th></tr>
+                </thead>
+                <tbody>
+                    {% for a in assignment_stats %}
+                    <tr>
+                        <td><a href="{{ a.assignment.get_absolute_url }}">{{ a.assignment.title }}</a>{% if not a.assignment.is_published %} <span class="meta">(draft)</span>{% endif %}</td>
+                        <td>{{ a.submitters }} / {{ a.num_students }} student{{ a.num_students|pluralize }}</td>
+                        <td>{% if a.mean_score is not None %}{{ a.mean_score|floatformat:0 }}%{% else %}<span class="meta">No submissions yet</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="meta">No assignments yet.</p>
+            {% endif %}
+        </c-card>
+
+        <c-card heading="Compare sections">
+            {% if compare_options %}
+            <p class="meta">Hypothesis tests between this section and another offering. <strong>Observational</strong> — a difference may reflect cohort, term, or content drift, not teaching. With small classes, “not significant” usually means underpowered; weigh the effect sizes.</p>
+            <p class="section-compare-links">
+                {% for o in compare_options %}
+                <a class="button secondary{% if o.slug == compare_active %} is-active{% endif %}" href="?cmp={{ o.slug }}#stats">vs {{ o.display_name }}</a>
+                {% endfor %}
+            </p>
+
+            {% if comparison %}
+            <h3>This section vs {{ comparison.other.display_name }}</h3>
+
+            <h4>Overall course grade</h4>
+            {% with o=comparison.overall %}
+            {% if o.comparable %}
+            <p>Mean {{ o.mean_a|floatformat:1 }}% vs {{ o.mean_b|floatformat:1 }}% (n = {{ o.n_a }} vs {{ o.n_b }}).</p>
+            <ul class="stat-list">
+                <li>Welch <em>t</em> = {{ o.welch.statistic|floatformat:2 }}, <strong>p = {{ o.welch.pvalue|floatformat:3 }}</strong> (permutation)</li>
+                <li>Mann–Whitney p = {{ o.mannwhitney.pvalue|floatformat:3 }}</li>
+                <li>Effect size: Cohen's <em>d</em> = {{ o.cohens_d|floatformat:2 }}, Cliff's δ = {{ o.cliffs_delta|floatformat:2 }}</li>
+            </ul>
+            {% else %}
+            <p class="meta">Not enough students with grades to compare ({{ o.n_a }} vs {{ o.n_b }}).</p>
+            {% endif %}
+            {% endwith %}
+
+            <h4>Letter-grade mix</h4>
+            {% with l=comparison.letters %}
+            {% if l.comparable %}
+            <p>χ² = {{ l.chi2.statistic|floatformat:2 }}, <strong>p = {{ l.chi2.pvalue|floatformat:3 }}</strong>; Cramér's V = {{ l.cramers_v|floatformat:2 }}.</p>
+            {% else %}
+            <p class="meta">Not enough data to compare letter distributions.</p>
+            {% endif %}
+            {% endwith %}
+
+            <h4>Per assignment <span class="meta">(submitters only; p-values Benjamini–Hochberg corrected)</span></h4>
+            {% if comparison.per_assignment %}
+            <table>
+                <thead>
+                    <tr><th>Assignment</th><th>Mean (this)</th><th>Mean (other)</th><th>p (Welch)</th><th>p (adjusted)</th><th>Cohen's d</th></tr>
+                </thead>
+                <tbody>
+                    {% for pa in comparison.per_assignment %}
+                    <tr>
+                        <td>{{ pa.title }}</td>
+                        {% with s=pa.scores %}
+                        {% if s.comparable %}
+                        <td>{{ s.mean_a|floatformat:0 }}% <span class="meta">(n={{ s.n_a }})</span></td>
+                        <td>{{ s.mean_b|floatformat:0 }}% <span class="meta">(n={{ s.n_b }})</span></td>
+                        <td>{{ s.welch.pvalue|floatformat:3 }}</td>
+                        <td>{{ pa.adj_pvalue|floatformat:3 }}</td>
+                        <td>{{ s.cohens_d|floatformat:2 }}</td>
+                        {% else %}
+                        <td colspan="5" class="meta">Too few submitters to compare ({{ s.n_a }} vs {{ s.n_b }}).</td>
+                        {% endif %}
+                        {% endwith %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="meta">No assignments shared between the two sections.</p>
+            {% endif %}
+            {% endif %}
+            {% else %}
+            <p class="meta">No other offerings to compare with yet. Use “Renew” to create another section of this course.</p>
+            {% endif %}
+        </c-card>

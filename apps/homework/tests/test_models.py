@@ -13,15 +13,17 @@ from apps.homework.models import (
     LeanSourceFile,
     Problem,
     Submission,
-    accessible_problems,
-    course_family,
-    editable_assignments,
-    editable_problems,
-    is_student_anywhere,
-    renew_course,
     validate_assignment_slug,
     validate_course_slug,
 )
+from apps.homework.ops import _unique_course_slug, course_family, renew_course
+from apps.homework.selectors import (
+    accessible_problems,
+    editable_assignments,
+    editable_problems,
+    is_student_anywhere,
+)
+from apps.homework.thumbnails import available_thumbnail_presets
 
 from .utils import make_role_matrix
 
@@ -321,13 +323,9 @@ class StrAndHelperCoverageTests(TestCase):
         self.assertEqual(Problem(assignment=self.m["assignment"]).position, 1)
 
     def test_unique_course_slug_suffixes_on_collision(self):
-        from apps.homework.models import _unique_course_slug
-
         self.assertEqual(_unique_course_slug("Test Course"), "test-course-2")
 
     def test_available_thumbnail_presets_lists_the_static_files(self):
-        from apps.homework.models import available_thumbnail_presets
-
         presets = available_thumbnail_presets()
         self.assertTrue(presets)
         self.assertIn("key", presets[0])

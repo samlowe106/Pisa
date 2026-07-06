@@ -7,11 +7,8 @@ grades but must not be able to mass-export them).
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.homework.models import (
-    Assignment,
-    accessible_assignments,
-    editable_courses,
-)
+from apps.homework.models import Assignment
+from apps.homework.selectors import accessible_assignments, editable_courses
 
 from .utils import make_role_matrix
 

@@ -1,15 +1,13 @@
-"""Coverage for apps/homework/views/problems.py — the pure helpers (pager, Lean-output parsing,
-executable resolution) and the run/submit/detail request handlers."""
+"""Coverage for apps/homework/views/problems.py and lean_runner.py — the pure helpers (pager,
+Lean-output parsing, executable resolution) and the run/submit/detail request handlers.
+"""
 
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
+from apps.homework.lean_runner import get_lean_executable, parse_lean_feedback
 from apps.homework.models import LeanSourceFile, Problem, Submission
-from apps.homework.views.problems import (
-    build_problem_pager,
-    get_lean_executable,
-    parse_lean_feedback,
-)
+from apps.homework.views.problems import build_problem_pager
 
 from .utils import make_role_matrix, requires_lean
 

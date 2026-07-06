@@ -1,8 +1,12 @@
 """Form validation: course grade-band/roster rules, renew term/section requirement, and the
 reserved-slug / policy-field handling on assignment and problem forms."""
 
+from io import BytesIO
+
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from PIL import Image
 
 from apps.homework.forms import (
     AssignmentForm,
@@ -144,11 +148,6 @@ class CourseFormThumbnailAndDedupTests(TestCase):
         self.assertEqual(form.cleaned_data["students"], [self.alice])  # deduped
 
     def test_upload_clears_a_chosen_preset(self):
-        from io import BytesIO
-
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        from PIL import Image
-
         buffer = BytesIO()
         Image.new("RGB", (1, 1)).save(buffer, "PNG")
         upload = SimpleUploadedFile(

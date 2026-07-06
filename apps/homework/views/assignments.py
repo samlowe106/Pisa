@@ -8,15 +8,14 @@ from django.views.generic import (
 )
 
 from ..forms import AssignmentForm
-from ..models import (
-    Assignment,
-    LeanSourceFile,
+from ..models import Assignment, LeanSourceFile
+from ..selectors import (
     accessible_assignments,
     editable_assignments,
     editable_courses,
     is_student_anywhere,
 )
-from .mixins import FormsetMixin
+from .mixins import FormsetMixin, ResolvedObjectMixin
 from .problems import ProblemFormSet
 
 
@@ -53,18 +52,14 @@ class AssignmentListView(LoginRequiredMixin, ListView):
         )
 
 
-class AssignmentDetailView(LoginRequiredMixin, DetailView):
+class AssignmentDetailView(LoginRequiredMixin, ResolvedObjectMixin, DetailView):
     model = Assignment
     template_name = "homework/assignment_detail.html"
     context_object_name = "assignment"
+    object_resolver = staticmethod(_assignment_by_slug)
 
     def get_queryset(self):
         return accessible_assignments(self.request.user)
-
-    def get_object(self, queryset=None):
-        return _assignment_by_slug(
-            queryset if queryset is not None else self.get_queryset(), self.kwargs
-        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -120,20 +115,18 @@ class AssignmentCreateView(LoginRequiredMixin, FormsetMixin, CreateView):
         return self.object.get_absolute_url()
 
 
-class AssignmentUpdateView(LoginRequiredMixin, FormsetMixin, UpdateView):
+class AssignmentUpdateView(
+    LoginRequiredMixin, FormsetMixin, ResolvedObjectMixin, UpdateView
+):
     model = Assignment
     form_class = AssignmentForm
     template_name = "homework/assignment_form.html"
     formset_class = ProblemFormSet
     formset_context_name = "problem_formset"
+    object_resolver = staticmethod(_assignment_by_slug)
 
     def get_queryset(self):
         return editable_assignments(self.request.user)
-
-    def get_object(self, queryset=None):
-        return _assignment_by_slug(
-            queryset if queryset is not None else self.get_queryset(), self.kwargs
-        )
 
     def get_form(self, form_class=None):
         form = super().get_form(form_class)

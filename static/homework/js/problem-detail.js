@@ -50,6 +50,29 @@
         }
     }
 
+    /**
+     * Shared renderer for the Goals / Messages / Errors panels, used by both the live-LSP
+     * diagnostics and the run/submit HTTP response so the two paths (and their empty-state
+     * wording) can't drift apart. `sep` joins entries ('\n\n' between LSP diagnostics, '\n'
+     * between parsed runner-output lines). Pass `goals: undefined` to leave the goals panel
+     * untouched — the LSP path fills it asynchronously via $/lean/plainGoal.
+     */
+    function renderPanels({ goals, messages, errors, sep = '\n' }) {
+        if (goals !== undefined) {
+            if (goals.length) {
+                setGoals(goals.join(sep));
+            } else if (errors.length) {
+                // No goals, but the run errored — don't claim the proof is complete.
+                setGoals('No goals produced.');
+            } else {
+                setGoals(GOALS_COMPLETE_MESSAGE);
+            }
+        }
+        setTabText('lean-messages', messages.length ? messages.join(sep) : 'No messages.');
+        setTabText('lean-errors', errors.length ? errors.join(sep) : 'No errors.');
+        setErrorCount(errors.length);
+    }
+
     class LeanLSPClient {
         constructor(problemPk) {
             this.ws = null;
@@ -238,9 +261,7 @@
             };
             const errors = diagnostics.filter((d) => d.severity === 1);
             const others = diagnostics.filter((d) => d.severity !== 1);
-            setTabText('lean-errors', errors.length ? errors.map(format).join('\n\n') : 'No errors.');
-            setErrorCount(errors.length);
-            setTabText('lean-messages', others.length ? others.map(format).join('\n\n') : 'No messages.');
+            renderPanels({ messages: others.map(format), errors: errors.map(format), sep: '\n\n' });
             setLeanStatus(errors.length ? `${errors.length} error${errors.length > 1 ? 's' : ''}` : 'No errors');
             // Diagnostics settled — refresh the goal at the cursor.
             this.requestGoals();
@@ -434,24 +455,11 @@
     }
 
     function renderLeanFeedback(data) {
-        const messages = document.getElementById('lean-messages');
-        const errors = document.getElementById('lean-errors');
-
-        const hasGoals = data.goals && data.goals.length;
-        const hasErrors = data.errors && data.errors.length;
-        if (hasGoals) {
-            setGoals(data.goals.join('\n'));
-        } else if (hasErrors) {
-            // No goals, but the run errored — don't claim the proof is complete.
-            setGoals('No goals produced.');
-        } else {
-            setGoals(GOALS_COMPLETE_MESSAGE);
-        }
-        messages.textContent =
-            data.messages && data.messages.length ? data.messages.join('\n') : 'No messages produced.';
-        errors.textContent =
-            data.errors && data.errors.length ? data.errors.join('\n') : 'No errors produced.';
-        setErrorCount(data.errors ? data.errors.length : 0);
+        renderPanels({
+            goals: data.goals || [],
+            messages: data.messages || [],
+            errors: data.errors || [],
+        });
 
         const diagnostics = document.getElementById('lean-diagnostics');
         if (

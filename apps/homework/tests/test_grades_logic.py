@@ -1,12 +1,13 @@
 """Scoring policies, per-course/per-student summaries, and the stats-tab plumbing
-(apps/homework/views/courses.py). The pure statistics in stats.py are covered separately;
+(apps/homework/reporting.py). The pure statistics in stats.py are covered separately;
 here we test how submissions roll up into grades and section samples."""
 
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
-from apps.homework.models import Assignment, Course, Problem, Submission, renew_course
-from apps.homework.views.courses import (
+from apps.homework.models import Assignment, Course, Problem, Submission
+from apps.homework.ops import renew_course
+from apps.homework.reporting import (
     _passed_pairs,
     compare_two_sections,
     course_cards_for,

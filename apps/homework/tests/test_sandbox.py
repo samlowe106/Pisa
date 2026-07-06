@@ -12,6 +12,7 @@ import tempfile
 from django.test import SimpleTestCase, override_settings
 
 from apps.homework import sandbox
+from apps.homework.lean_runner import run_lean_process
 
 from .utils import requires_bwrap, requires_lean
 
@@ -199,8 +200,6 @@ class SandboxLeanSmokeTest(SimpleTestCase):
     def test_real_proof_compiles_inside_sandbox(self):
         # Guards that the full default sandbox (bubblewrap + env-strip + read-only FS) doesn't
         # break the elan toolchain. Needs a bwrap that can actually sandbox here.
-        from apps.homework.views.problems import run_lean_process
-
         with override_settings(LEAN_TIMEOUT=120):
             result = run_lean_process("theorem t : True := trivial\n")
         self.assertEqual(result.get("returncode"), 0)
@@ -214,8 +213,6 @@ class SandboxAdversarialLeanTests(SimpleTestCase):
     Network / filesystem isolation (Layer 2) is covered by SandboxIsolationTests."""
 
     def test_runaway_evaluation_times_out_and_returns(self):
-        from apps.homework.views.problems import run_lean_process
-
         runaway = "partial def spin : Nat → Nat\n  | n => spin (n + 1)\n#eval spin 0\n"
         with override_settings(LEAN_TIMEOUT=5):
             result = run_lean_process(runaway)
@@ -223,8 +220,6 @@ class SandboxAdversarialLeanTests(SimpleTestCase):
         self.assertTrue(result.get("timeout"))
 
     def test_secret_env_is_stripped_but_public_env_passes_through(self):
-        from apps.homework.views.problems import run_lean_process
-
         # "SECRET" matches the deny pattern; the other name is innocuous and should survive.
         os.environ["PISA_TEST_SECRET"] = "SENTINEL_LEAK"
         os.environ["PISA_TEST_PUBLIC"] = "VISIBLE_OK"

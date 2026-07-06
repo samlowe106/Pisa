@@ -2,7 +2,7 @@
 
 The browser's editor only holds the student's *editable* block, but Lean must compile the
 *assembled* document (imported source files + fixed code + editable code) -- the same ordering
-as ``assemble_lean_submission_source`` in homework/views/problems.py. This module owns:
+as ``assemble_lean_submission_source`` in homework/lean_runner.py. This module owns:
 
 * LSP ``Content-Length`` framing (read/write JSON-RPC over a subprocess pipe),
 * assembling the full Lean document from a fixed prefix + live editable text + fixed suffix,

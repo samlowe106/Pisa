@@ -5,7 +5,15 @@ automatically in the course-form thumbnail picker, keyed by filename.
 
 ## From Wikimedia Commons (automated)
 
-To add a Commons image with the image + sidecar generated for you:
+The Commons-fetched presets are **not in version control** (they and their `originals/` are
+gitignored) — [`sources.txt`](sources.txt) is the list of record. After a fresh checkout:
+
+```sh
+manage.py fetch_commons_thumbnail --from-file
+```
+
+fetches everything in the manifest, skipping presets already on disk. To add an image, append
+its Commons page URL to `sources.txt` and re-run. One-off fetches work too:
 
 ```sh
 manage.py fetch_commons_thumbnail "https://commons.wikimedia.org/wiki/File:Mitosis.jpg"
@@ -16,7 +24,9 @@ manage.py fetch_commons_thumbnail <url> --width 1600 --height 360 --metric l1 --
 
 It downloads the image sized to `--width` (default 1000 px; Commons only serves a fixed set of
 thumbnail widths, so it fetches the nearest one and downscales locally to the exact size) and
-writes the attribution sidecar below from the file's Commons metadata. See
+writes the attribution sidecar below from the file's Commons metadata. When the image gets
+resampled, the untouched full-resolution original is also kept in `originals/` (pass
+`--skip-original` to save the bandwidth/disk; the picker ignores that subdirectory). See
 `apps/homework/management/commands/fetch_commons_thumbnail.py`.
 
 ## Attribution (manual)

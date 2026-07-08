@@ -1,0 +1,60 @@
+# Wikimedia Commons sources for the course-thumbnail presets in this directory.
+#
+# The images themselves (and their .json attribution sidecars and originals/) are NOT in
+# version control — fetch them with:
+#
+#     manage.py fetch_commons_thumbnail --from-file
+#
+# Re-running skips anything already downloaded, so this is safe to run repeatedly. One
+# reference per line; '#' starts a comment. See README.md for the full command options.
+
+# Landscapes / nature
+https://commons.wikimedia.org/wiki/File:Matterhorn_sunset_2016_(Unsplash).jpg
+https://commons.wikimedia.org/wiki/File:NGC_2683_Spiral_galaxy.jpg
+https://commons.wikimedia.org/wiki/File:Wooden_spiral_stairs_(Neboti%C4%8Dnik,_Ljubljana).jpg
+
+# Minerals
+https://commons.wikimedia.org/wiki/File:Bi_Bismuth_20140412184205.jpg
+https://commons.wikimedia.org/wiki/File:Bismuth_crystal_macro.jpg
+https://commons.wikimedia.org/wiki/File:Botryoidal_Purple_Grape_Agate_Chalcedony_from_Indonesia.jpg
+https://commons.wikimedia.org/wiki/File:Pyrite_-_Huanzala_mine,_Huallanca,_Bolognesi,_Ancash,_Peru.jpg
+
+# History of mathematics
+https://commons.wikimedia.org/wiki/File:Rhind_Mathematical_Papyrus.jpg
+https://commons.wikimedia.org/wiki/File:Chinese_pythagoras.jpg
+https://commons.wikimedia.org/wiki/File:Plimpton_322.jpg
+https://commons.wikimedia.org/wiki/File:Konigsberg_Bridge.png
+https://commons.wikimedia.org/wiki/File:Principia_Mathematica_54-43.png
+https://commons.wikimedia.org/wiki/File:Spirale_Ulam_150.jpg
+https://commons.wikimedia.org/wiki/File:Mandel_zoom_11_satellite_double_spiral.jpg
+https://commons.wikimedia.org/wiki/File:Illustrated_Opening._Arabic_Translation_of_Euclid%27s_Elementa_(CBL_Ar_3035,_ff.105b-106a).jpg
+https://commons.wikimedia.org/wiki/File:Woman_teaching_geometry.jpg
+
+# Byrne's Euclid
+https://commons.wikimedia.org/wiki/File:Byrne-30.png
+https://commons.wikimedia.org/wiki/File:Byrne-35.png
+https://commons.wikimedia.org/wiki/File:Byrne-56.png
+https://commons.wikimedia.org/wiki/File:Byrne-76.png
+https://commons.wikimedia.org/wiki/File:Byrne-105.png
+https://commons.wikimedia.org/wiki/File:Byrne-137.png
+https://commons.wikimedia.org/wiki/File:Byrne-138.png
+
+# People
+https://commons.wikimedia.org/wiki/File:Ada_Lovelace_portrait.jpg
+https://commons.wikimedia.org/wiki/File:Alan_Turing_Aged_16.jpg
+https://commons.wikimedia.org/wiki/File:Galois-1830.JPG
+https://commons.wikimedia.org/wiki/File:Aldrin_Apollo_11.jpg
+
+# Art / architecture
+https://commons.wikimedia.org/wiki/File:%22The_School_of_Athens%22_by_Raffaello_Sanzio_da_Urbino.jpg
+https://commons.wikimedia.org/wiki/File:Death_of_Archimedes_(1815)_by_Thomas_Degeorge.png
+https://commons.wikimedia.org/wiki/File:Kandinsky_-_Jaune_Rouge_Bleu.jpg
+https://commons.wikimedia.org/wiki/File:Kandinsky_-_Composition_8,_July_1923.jpg
+https://commons.wikimedia.org/wiki/File:Isfahan_Lotfollah_mosque_ceiling_symmetric.jpg
+https://commons.wikimedia.org/wiki/File:Czech-2013-Prague-Astronomical_clock_face.jpg
+
+# Science / engineering / maps
+https://commons.wikimedia.org/wiki/File:Views_of_the_LHC_tunnel_sector_3-4,_tirage_2.jpg
+https://commons.wikimedia.org/wiki/File:Babbages_Analytical_Engine,_1834-1871._(9660574685).jpg
+https://commons.wikimedia.org/wiki/File:1780_map_showing_the_area_around_the_medieval_fortress_of_and_town_of_Klis.jpg
+https://commons.wikimedia.org/wiki/File:1917_BERy_system_map.png

@@ -179,3 +179,10 @@ media/
 
 # collectstatic output (regenerated on deploy)
 staticfiles/
+
+# Commons-fetched thumbnail presets (images, sidecars, full-res originals) are re-fetched from
+# the manifest, not committed: manage.py fetch_commons_thumbnail --from-file
+# (Already-tracked presets stay tracked; force-add any new hand-made preset with git add -f.)
+static/homework/img/thumbnails/*
+!static/homework/img/thumbnails/README.md
+!static/homework/img/thumbnails/sources.txt

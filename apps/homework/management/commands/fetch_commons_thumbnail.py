@@ -23,6 +23,26 @@ from apps.homework.thumbnails import THUMBNAIL_PRESET_DIR
 # Be gentle on the Commons API between images in a batch (a tight loop earns a 429).
 _BATCH_DELAY_SECONDS = 1.0
 
+# Full-resolution originals live in a subdirectory: the preset picker scans only the top level
+# of the thumbnails directory, so files in here never show up as (duplicate) presets.
+ORIGINALS_SUBDIR = "originals"
+
+# Default manifest name for --from-file: the version-controlled list of Commons references the
+# presets are fetched from (the images themselves are gitignored — re-fetch, don't commit).
+SOURCES_FILENAME = "sources.txt"
+
+
+def _read_manifest(path: Path) -> list[str]:
+    """References from a manifest file: one per line, blank lines and ``#`` comments ignored."""
+    if not path.is_file():
+        raise CommandError(f"Manifest not found: {path}")
+    entries = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            entries.append(line)
+    return entries
+
 
 def _default_dir() -> Path:
     """The course-thumbnail presets directory (first STATICFILES_DIRS entry), where the app already
@@ -39,8 +59,22 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "urls",
-            nargs="+",
+            nargs="*",
             help="Commons File: page URL(s), 'File:...' title(s), or bare filename(s).",
+        )
+        parser.add_argument(
+            "--from-file",
+            nargs="?",
+            const=True,
+            default=None,
+            metavar="PATH",
+            help=(
+                "Read references from a manifest file (one per line, '#' comments), in "
+                "addition to any given on the command line. Without a PATH, reads the "
+                f"{SOURCES_FILENAME} next to the output directory. Already-downloaded "
+                "presets are skipped, so re-running against the manifest only fetches "
+                "what's missing."
+            ),
         )
         parser.add_argument(
             "--width",
@@ -77,17 +111,37 @@ class Command(BaseCommand):
             help="Overwrite an existing image/sidecar with the same name.",
         )
         parser.add_argument(
+            "--skip-original",
+            action="store_true",
+            help=(
+                "Don't keep the full-resolution original. By default a resampled fetch also "
+                f"downloads the original into <dir>/{ORIGINALS_SUBDIR}/ (originals can be "
+                "multi-MB, hence the opt-out)."
+            ),
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Show what would be downloaded + the sidecar, without writing anything.",
         )
 
     def handle(self, *args, **options):
-        urls = options["urls"]
+        out_dir = Path(options["directory"]) if options["directory"] else _default_dir()
+
+        urls = list(options["urls"])
+        manifest = options["from_file"]
+        if manifest:
+            manifest_path = (
+                out_dir / SOURCES_FILENAME if manifest is True else Path(manifest)
+            )
+            urls += [u for u in _read_manifest(manifest_path) if u not in urls]
+        if not urls:
+            raise CommandError(
+                "Give at least one URL, or --from-file for the manifest."
+            )
         if options["name"] and len(urls) > 1:
             raise CommandError("--name can only be used with a single URL.")
 
-        out_dir = Path(options["directory"]) if options["directory"] else _default_dir()
         if not options["dry_run"]:
             out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -125,6 +179,16 @@ class Command(BaseCommand):
             )
         image_path = out_dir / f"{stem}{commons.extension_for(download_url, info.mime)}"
         sidecar_path = out_dir / f"{stem}.json"
+        # When the preset is a resample, also keep the untouched original (its extension can
+        # differ, e.g. an SVG rasterizes to a PNG thumbnail but the original stays .svg). When
+        # the preset already *is* the original (clamp case), a second copy would be identical.
+        original_path = None
+        if not is_original and not options["skip_original"]:
+            original_path = (
+                out_dir
+                / ORIGINALS_SUBDIR
+                / f"{stem}{commons.extension_for(info.url, info.mime)}"
+            )
 
         if (image_path.exists() or sidecar_path.exists()) and not options["overwrite"]:
             self.stdout.write(f"• {stem}: already exists, skipping (use --overwrite)")
@@ -141,11 +205,18 @@ class Command(BaseCommand):
         note = "original" if is_original else "resampled"
 
         if options["dry_run"]:
+            original_line = (
+                f"    original: {ORIGINALS_SUBDIR}/{original_path.name}"
+                f"  {info.width}×{info.height}\n"
+                if original_path
+                else ""
+            )
             self.stdout.write(
                 f"[dry-run] {title}\n"
                 f"    image:   {image_path.name}  {final_w}×{final_h} ({note}"
                 f"; source {info.width}×{info.height})\n"
-                f"    sidecar: {sidecar_path.name}\n"
+                + original_line
+                + f"    sidecar: {sidecar_path.name}\n"
                 + "\n".join(f"    {line}" for line in sidecar_json.splitlines())
             )
             return
@@ -157,11 +228,19 @@ class Command(BaseCommand):
             actual_w, actual_h = commons.download_scaled(
                 download_url, target_w, image_path
             )
+        if original_path is not None:
+            original_path.parent.mkdir(parents=True, exist_ok=True)
+            commons.download(info.url, original_path)
         sidecar_path.write_text(sidecar_json, encoding="utf-8")
 
+        kept = (
+            f" + original {info.width}×{info.height} ({ORIGINALS_SUBDIR}/)"
+            if original_path
+            else ""
+        )
         self.stdout.write(
             self.style.SUCCESS(
-                f"✓ {image_path.name} {actual_w}×{actual_h} ({note}) — "
+                f"✓ {image_path.name} {actual_w}×{actual_h} ({note}){kept} — "
                 f"{attribution.get('title', stem)}"
                 f" by {attribution.get('author', 'unknown')}"
                 f" ({attribution.get('license', 'no license')})"

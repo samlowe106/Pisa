@@ -139,6 +139,36 @@ class ParseArtistTests(SimpleTestCase):
         self.assertEqual(name, "Fo&o")
         self.assertEqual(url, "https://commons.wikimedia.org/wiki/User:Baz")
 
+    def test_multilingual_repeats_are_deduped(self):
+        # The "unknown author" template repeats the name in per-language spans with no
+        # whitespace between them; adjacent identical segments collapse to one.
+        name, url = commons.parse_artist(
+            '<span lang="en">Unknown author</span><span lang="de">Unknown author</span>'
+        )
+        self.assertEqual(name, "Unknown author")
+        self.assertIsNone(url)
+
+    def test_text_around_a_link_is_kept_in_order(self):
+        name, _ = commons.parse_artist('Photo by <a href="/wiki/User:X">X</a> in 1900')
+        self.assertEqual(name, "Photo by X in 1900")
+
+
+class CleanObjectNameTests(SimpleTestCase):
+    def test_quickstatements_labels_are_cut(self):
+        raw = 'Death of Archimedes label QS:Len,"Death of Archimedes" label QS:Lde,"Der Tod des Archimedes"'
+        self.assertEqual(commons._clean_object_name(raw), "Death of Archimedes")
+
+    def test_language_prefix_dropped_only_with_qs_markup(self):
+        raw = 'Italian: Scuola di Atene title QS:P1476,it:"Scuola di Atene"'
+        self.assertEqual(commons._clean_object_name(raw), "Scuola di Atene")
+        # Without QS markup a colon is part of the title, not a language prefix.
+        self.assertEqual(commons._clean_object_name("Study: a nude"), "Study: a nude")
+
+    def test_plain_titles_pass_through(self):
+        self.assertEqual(
+            commons._clean_object_name("Spirale Ulam 150"), "Spirale Ulam 150"
+        )
+
 
 class BuildAttributionTests(SimpleTestCase):
     def test_public_domain_plain_author(self):
@@ -280,6 +310,8 @@ class FetchCommandTests(SimpleTestCase):
                 commons.build_attribution(SPIRALE),
             )
             mocks["download_scaled"].assert_not_called()
+            # The preset IS the original here — no duplicate copy in originals/.
+            self.assertFalse((Path(tmp) / "originals").exists())
 
     def test_downscale_path_uses_download_scaled_with_target_width(self):
         with tempfile.TemporaryDirectory() as tmp, self._patched() as mocks:
@@ -292,14 +324,39 @@ class FetchCommandTests(SimpleTestCase):
                 Path(dest).write_bytes(b"scaled"),
                 (w, 667),
             )[1]
+            mocks["download"].side_effect = lambda url, dest: Path(dest).write_bytes(
+                b"full-res"
+            )
 
             self._run("File:Big.jpg", "--dir", tmp, "--name", "big", "--width", "1000")
 
             self.assertEqual((Path(tmp) / "big.jpg").read_bytes(), b"scaled")
-            mocks["download"].assert_not_called()
             self.assertEqual(
                 mocks["download_scaled"].call_args.args[1], 1000
             )  # target width
+            # A resampled fetch also keeps the untouched original, out of the picker's
+            # (top-level-only) scan.
+            self.assertEqual(
+                (Path(tmp) / "originals" / "big.jpg").read_bytes(), b"full-res"
+            )
+            self.assertEqual(mocks["download"].call_args.args[0], _BIG.url)
+
+    def test_skip_original_downloads_only_the_resample(self):
+        with tempfile.TemporaryDirectory() as tmp, self._patched() as mocks:
+            mocks["fetch_image_info"].return_value = _BIG
+            mocks["pick_download_url"].return_value = (
+                "https://upload.wikimedia.org/.../1280px-Big.jpg",
+                False,
+            )
+            mocks["download_scaled"].side_effect = lambda url, w, dest: (
+                Path(dest).write_bytes(b"scaled"),
+                (w, 667),
+            )[1]
+
+            self._run("File:Big.jpg", "--dir", tmp, "--name", "big", "--skip-original")
+
+            mocks["download"].assert_not_called()
+            self.assertFalse((Path(tmp) / "originals").exists())
 
     def test_dry_run_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp, self._patched() as mocks:
@@ -313,6 +370,60 @@ class FetchCommandTests(SimpleTestCase):
             mocks["download"].assert_not_called()
             mocks["download_scaled"].assert_not_called()
 
+    def test_dry_run_announces_the_kept_original(self):
+        with tempfile.TemporaryDirectory() as tmp, self._patched() as mocks:
+            mocks["fetch_image_info"].return_value = _BIG
+            mocks["pick_download_url"].return_value = (
+                "https://upload.wikimedia.org/.../1280px-Big.jpg",
+                False,
+            )
+
+            output = self._run("File:Big.jpg", "--dir", tmp, "--dry-run")
+
+            self.assertIn("originals/big.jpg", output)
+            self.assertIn("3000×2000", output)
+            self.assertEqual(list(Path(tmp).iterdir()), [])  # still nothing written
+            mocks["download"].assert_not_called()
+
     def test_name_rejected_for_multiple_urls(self):
         with self.assertRaises(CommandError):
             self._run("File:A.jpg", "File:B.jpg", "--name", "x")
+
+    def test_no_urls_and_no_manifest_is_an_error(self):
+        with self.assertRaises(CommandError):
+            self._run("--dry-run")
+
+    def test_from_file_reads_manifest_and_skips_existing(self):
+        with tempfile.TemporaryDirectory() as tmp, self._patched() as mocks:
+            manifest = Path(tmp) / "sources.txt"
+            manifest.write_text(
+                "# comment line\n"
+                "\n"
+                "File:Spirale_Ulam_150.jpg  # trailing comment\n"
+                "File:Big.jpg\n"
+            )
+            # Spirale already downloaded -> skipped without any network call.
+            (Path(tmp) / "spirale-ulam-150.jpg").write_bytes(b"already here")
+            (Path(tmp) / "spirale-ulam-150.json").write_text("{}")
+
+            mocks["fetch_image_info"].side_effect = lambda title: (
+                SPIRALE if "Spirale" in title else _BIG
+            )
+            mocks["pick_download_url"].return_value = (_BIG.url, True)
+            mocks["download"].side_effect = lambda url, dest: Path(dest).write_bytes(
+                b"img"
+            )
+
+            output = self._run("--from-file", str(manifest), "--dir", tmp)
+
+            self.assertIn("skipping", output)  # spirale untouched
+            self.assertEqual(
+                (Path(tmp) / "spirale-ulam-150.jpg").read_bytes(), b"already here"
+            )
+            self.assertTrue((Path(tmp) / "big.jpg").exists())
+            mocks["download"].assert_called_once()  # only Big was downloaded
+
+    def test_from_file_missing_manifest_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(CommandError):
+                self._run("--from-file", str(Path(tmp) / "nope.txt"), "--dir", tmp)

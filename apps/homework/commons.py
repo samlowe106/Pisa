@@ -146,12 +146,19 @@ def best_thumb_width(
 class _ArtistParser(HTMLParser):
     """Pull display text + the first link out of an extmetadata ``Artist`` HTML value."""
 
+    # Elements that delimit text segments. Multilingual author templates repeat the same name
+    # in per-language spans with no whitespace between them ("Unknown authorUnknown author"),
+    # so parse_artist needs the element boundaries to dedupe the repeats.
+    _SEGMENT_TAGS = {"a", "div", "p", "span"}
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.text_parts: list[str] = []
         self.first_href: str | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._SEGMENT_TAGS:
+            self.text_parts.append("\x00")
         if tag == "a" and self.first_href is None:
             href = dict(attrs).get("href")
             if href:
@@ -177,13 +184,40 @@ def parse_artist(artist_html: str) -> tuple[str, str | None]:
     """
     parser = _ArtistParser()
     parser.feed(artist_html or "")
-    name = re.sub(r"\s+", " ", "".join(parser.text_parts)).strip()
+    segments = [
+        re.sub(r"\s+", " ", segment).strip()
+        for segment in "".join(parser.text_parts).split("\x00")
+    ]
+    # Drop empties and adjacent repeats (multilingual templates emit the same name per language).
+    kept: list[str] = []
+    for segment in segments:
+        if segment and (not kept or segment != kept[-1]):
+            kept.append(segment)
+    name = " ".join(kept)
     href = _absolute_url(parser.first_href) if parser.first_href else None
     return name, href
 
 
 def _strip_html(value: str) -> str:
     return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", value or ""))).strip()
+
+
+def _clean_object_name(value: str) -> str:
+    """Strip HTML and the QuickStatements noise Commons embeds in some ``ObjectName`` values.
+
+    Artworks often carry every translation of their title as structured-data markup, e.g.
+    ``Death of Archimedes label QS:Len,"Death of Archimedes" label QS:Lde,"Der Tod..."`` —
+    everything from the first ``label QS:``/``title QS:`` on is machine data, not the title.
+    A leading ``<language>:`` prefix (``Italian: Scuola di Atene``) is dropped the same way.
+    """
+    text = _strip_html(value)
+    parts = re.split(r"\s*\b(?:label|title)\s+QS:", text, maxsplit=1)
+    text = parts[0].strip()
+    if len(parts) > 1:
+        # Only in the multilingual-markup case: drop a "Italian: " style language prefix.
+        # (Unconditionally, this would mangle legitimate titles like "Study: a nude".)
+        text = re.sub(r"^[A-Z][a-z]+:\s+", "", text)
+    return text
 
 
 def _extmeta(info: ImageInfo, key: str) -> str:
@@ -199,7 +233,7 @@ def build_attribution(
     fields = {
         "title": (
             title_override
-            or _strip_html(_extmeta(info, "ObjectName"))
+            or _clean_object_name(_extmeta(info, "ObjectName"))
             or title_from_filename(info.title)
         ),
         "author": author,

@@ -15,17 +15,21 @@ services:
     env_file: .env
     # Untrusted Lean runs inside a bubblewrap sandbox (LEAN_SANDBOX_WRAPPER, on by default),
     # which needs unprivileged user namespaces — blocked by Docker's default seccomp profile —
-    # and mount() inside them — blocked by Docker's default AppArmor profile ("bwrap: Failed
-    # to make / slave: Permission denied"). Relaxing both lets bubblewrap isolate Lean (no
+    # mount() inside them — blocked by Docker's default AppArmor profile ("bwrap: Failed to
+    # make / slave: Permission denied") — and a fresh procfs mount for the new pid namespace,
+    # which the kernel refuses while Docker masks /proc paths ("bwrap: Can't mount proc on
+    # /newroot/proc"). All three grants are required; bubblewrap then isolates Lean (no
     # network / read-only filesystem). The app process is trusted; tighter custom profiles are
     # a future refinement (see TODO.md).
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
+      - systempaths=unconfined
     environment:
-      # Container paths for the baked-in Lean toolchain (override any host paths from .env).
-      LEAN_EXECUTABLE: /root/.elan/bin/lean
-      LEAN_LSP_CMD: /root/.elan/bin/lean --server
+      # Container paths for the baked-in Lean toolchain (the shim-free binary the Dockerfile
+      # symlinks; overrides any host paths from .env).
+      LEAN_EXECUTABLE: /usr/local/bin/lean-direct
+      LEAN_LSP_CMD: /usr/local/bin/lean-direct --server
     volumes:
       - ./data:/app/data # SQLite database
       - ./media:/app/media # user uploads

@@ -33,15 +33,17 @@ jobs:
 
       # Run the suite under coverage inside the image. The container is named (not
       # --rm) so we can copy the reports out even if tests fail.
-      # `--security-opt seccomp=unconfined` lets the default bubblewrap Lean sandbox use
-      # unprivileged user namespaces inside the container, and `apparmor=unconfined` lets it
-      # set up its mount namespace (same as the compose files), so the real-Lean sandbox tests
+      # The default bubblewrap Lean sandbox needs all three grants inside Docker (same as the
+      # compose files): `seccomp=unconfined` for unprivileged user namespaces,
+      # `apparmor=unconfined` for its mount namespace setup, and `systempaths=unconfined` so
+      # the kernel accepts its fresh /proc mount. With these the real-Lean sandbox tests
       # exercise the production isolation.
       - name: Run tests with coverage
         run: |
           docker run --name pisa-tests \
             --security-opt seccomp=unconfined \
             --security-opt apparmor=unconfined \
+            --security-opt systempaths=unconfined \
             -e SECRET_KEY=ci-test-secret-key-not-for-production \
             pisa-test:ci \
             sh -c 'coverage run manage.py test --verbosity=2; status=$?; coverage report; coverage xml; coverage html; exit $status'

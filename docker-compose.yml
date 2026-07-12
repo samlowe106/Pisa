@@ -7,19 +7,22 @@ services:
     ports:
       - "8000:8000"
     # Lets the default bubblewrap Lean sandbox create its namespaces/mounts (see the prod
-    # compose for the rationale) — Docker's default seccomp profile blocks the unshare and
-    # its default AppArmor profile blocks the mount calls ("bwrap: Failed to make / slave:
-    # Permission denied").
+    # compose for the rationale) — all three are required: Docker's default seccomp profile
+    # blocks the unshare, its default AppArmor profile blocks the mount calls ("bwrap: Failed
+    # to make / slave: Permission denied"), and its masked /proc paths make the kernel refuse
+    # bwrap's fresh procfs mount ("bwrap: Can't mount proc on /newroot/proc").
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
+      - systempaths=unconfined
     volumes:
       - .:/app
     environment:
       PYTHONUNBUFFERED: "1"
-      # Container paths for Lean. These override the host paths that .env sets (mounted via
-      # the volume below); load_dotenv() does not overwrite already-set env vars, so these win.
-      LEAN_EXECUTABLE: /root/.elan/bin/lean
-      LEAN_LSP_CMD: /root/.elan/bin/lean --server
+      # Container paths for Lean (the shim-free binary the Dockerfile symlinks). These
+      # override the host paths that .env sets (mounted via the volume below); load_dotenv()
+      # does not overwrite already-set env vars, so these win.
+      LEAN_EXECUTABLE: /usr/local/bin/lean-direct
+      LEAN_LSP_CMD: /usr/local/bin/lean-direct --server
     stdin_open: true
     tty: true

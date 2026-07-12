@@ -42,3 +42,19 @@ htmlcov/
 build
 dist
 uploads
+
+# collectstatic output — the entrypoint regenerates it on every start
+staticfiles/
+
+# Commons-fetched thumbnail presets: keep the image lean by excluding the full-res
+# originals/ and every fetched preset. Fetch them post-deploy:
+# manage.py fetch_commons_thumbnail --from-file
+# Kept: the hand-made SVGs (tiny) and The School of Athens, which the login banner uses.
+static/homework/img/thumbnails/*
+!static/homework/img/thumbnails/README.md
+!static/homework/img/thumbnails/sources.txt
+!static/homework/img/thumbnails/template.json
+!static/homework/img/thumbnails/aurora.*
+!static/homework/img/thumbnails/ember.*
+!static/homework/img/thumbnails/meadow.*
+!static/homework/img/thumbnails/the-school-of-athens-by-raffaello-sanzio-da-urbino.*

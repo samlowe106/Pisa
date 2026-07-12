@@ -6,10 +6,13 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     ports:
       - "8000:8000"
-    # Lets the default bubblewrap Lean sandbox use unprivileged user namespaces (see the prod
-    # compose for the rationale).
+    # Lets the default bubblewrap Lean sandbox create its namespaces/mounts (see the prod
+    # compose for the rationale) — Docker's default seccomp profile blocks the unshare and
+    # its default AppArmor profile blocks the mount calls ("bwrap: Failed to make / slave:
+    # Permission denied").
     security_opt:
       - seccomp:unconfined
+      - apparmor:unconfined
     volumes:
       - .:/app
     environment:

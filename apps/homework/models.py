@@ -135,8 +135,9 @@ class Course(models.Model):
                 return letter, css_class
         return "F", "grade-f"
 
-    # --- Per-course roles. Site admins (user.is_staff) outrank everyone in every course;
-    # capability is hierarchical: admin ⊇ instructor ⊇ TA ⊇ student. ---
+    # region Per-course roles
+    # Site admins (user.is_staff) outrank everyone in every course;
+    # capability is hierarchical: admin ⊇ instructor ⊇ TA ⊇ student.
 
     def is_instructor(self, user):
         """Edit access: a site admin or one of this course's instructors. Instructors can
@@ -163,6 +164,8 @@ class Course(models.Model):
         if self.students.filter(pk=user.pk).exists():
             return "student"
         return None
+
+    # endregion
 
 
 class Assignment(models.Model):
@@ -252,7 +255,7 @@ class Problem(models.Model):
     points = models.PositiveIntegerField(
         default=1, help_text="Points awarded for solving this problem"
     )
-    # --- Submission policy (see apps/homework/lean_policy.py) ---
+    # region Submission policy (see apps/homework/lean_policy.py)
     allowed_constructs = models.JSONField(
         default=list,
         blank=True,
@@ -278,6 +281,7 @@ class Problem(models.Model):
             "provides."
         ),
     )
+    # endregion
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

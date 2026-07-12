@@ -259,7 +259,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LEAN_EXECUTABLE = os.environ.get("LEAN_EXECUTABLE", None)
 LEAN_TIMEOUT = int(os.environ.get("LEAN_TIMEOUT", "60"))
 
-# --- Lean sandboxing (apps/homework/sandbox.py) ----------------------------------------
+# region Lean sandboxing (apps/homework/sandbox.py)
 # Student-submitted Lean is untrusted code (elaboration can run IO), so every Lean process is
 # launched with a stripped environment, POSIX resource limits, and its own process group.
 # Set LEAN_SANDBOX_ENABLED=False to turn this off (not recommended).
@@ -309,8 +309,9 @@ LEAN_SANDBOX_WRAPPER = shlex.split(
         "--bind {workdir} {workdir} --chdir {workdir}",
     )
 )
+# endregion
 
-# --- Logging ---------------------------------------------------------------------------
+# region Logging
 # Everything goes to the console (captured by Docker / journald). Level via LOG_LEVEL.
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 # Negative-path views legitimately return 4xx in tests; django.request logs those at WARNING
@@ -345,8 +346,9 @@ LOGGING = {
         },
     },
 }
+# endregion
 
-# --- Error monitoring (optional) -------------------------------------------------------
+# region Error monitoring (optional)
 # Set SENTRY_DSN to turn on Sentry (the Django integration auto-instruments). Off otherwise.
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 if SENTRY_DSN:
@@ -360,6 +362,7 @@ if SENTRY_DSN:
         traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0")),
         send_default_pii=False,
     )
+# endregion
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "homework:course_list"

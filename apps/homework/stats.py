@@ -12,8 +12,6 @@ Determinism: permutation p-values are seeded (``DEFAULT_SEED``) so the same data
 number across page loads. Bump ``DEFAULT_RESAMPLES`` for tighter p-values at some CPU cost.
 """
 
-from __future__ import annotations
-
 import math
 import random
 from dataclasses import dataclass
@@ -46,7 +44,7 @@ def _sample_var(values, m):
     return sum((v - m) ** 2 for v in values) / (n - 1)
 
 
-# --- Primitives (scipy.stats-shaped) ---------------------------------------------------
+# region Primitives (scipy.stats-shaped)
 
 
 def _welch_t(a, b):
@@ -184,7 +182,10 @@ def false_discovery_control(pvalues, *, method="bh"):
     return adjusted
 
 
-# --- Effect sizes (no direct scipy.stats equivalent) -----------------------------------
+# endregion
+
+
+# region Effect sizes (no direct scipy.stats equivalent)
 
 
 def cohens_d(a, b):
@@ -222,7 +223,10 @@ def cramers_v(table):
     return math.sqrt(chi2_statistic(table) / (n * (k - 1)))
 
 
-# --- Orchestration (Pisa-specific) -----------------------------------------------------
+# endregion
+
+
+# region Orchestration (Pisa-specific)
 
 
 @dataclass
@@ -295,3 +299,6 @@ def compare_letters(counts_a, counts_b, *, n_resamples=DEFAULT_RESAMPLES, rng=No
         chi2=chi2_contingency(table, n_resamples=n_resamples, rng=_rng(rng)),
         cramers_v=cramers_v(table),
     )
+
+
+# endregion

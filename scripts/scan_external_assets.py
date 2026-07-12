@@ -23,8 +23,6 @@ CI can surface findings as GitHub code-scanning alerts.
 Exit codes: 0 = clean, 1 = findings, 2 = usage error.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re

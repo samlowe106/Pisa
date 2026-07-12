@@ -245,6 +245,16 @@ class ProblemRunView(View):
                 "messages": [],
                 "errors": ["Lean executable not found."],
             }
+        elif result.get("sandbox_error"):
+            response = build_lean_run_response(
+                {
+                    "error": "The server's Lean sandbox failed to start, so Lean could not "
+                    "run. This is a server problem — please tell your instructor.",
+                    "stdout": result["stdout"],
+                    "stderr": result["stderr"],
+                },
+                keep_internal=request.user.is_staff,
+            )
         elif result.get("timeout"):
             response = build_lean_run_response(
                 {

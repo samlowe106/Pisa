@@ -187,7 +187,7 @@ class CourseDetailView(LoginRequiredMixin, DetailView):
             ]
         context["students"] = students
 
-        # --- Statistics tab (staff only) ---
+        # region Statistics tab (staff only)
         if is_course_staff:
             assignment_total_points: dict[int, int] = defaultdict(int)
             for problem in problems:
@@ -249,6 +249,7 @@ class CourseDetailView(LoginRequiredMixin, DetailView):
                         [counts[other.pk][letter] for letter in _GRADE_LETTERS],
                     )
                     context["compare_active"] = other.slug
+        # endregion
 
         return context
 

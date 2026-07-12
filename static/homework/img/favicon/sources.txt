@@ -1,0 +1,9 @@
+# Favicon provenance.
+#
+# All sizes were generated with https://favicon.io from a crop of:
+#
+#   "The Leaning Tower of Pisa" by Saffron Blaze, CC BY-SA 3.0
+#   https://commons.wikimedia.org/wiki/File:The_Leaning_Tower_of_Pisa_SB.jpeg
+#   https://creativecommons.org/licenses/by-sa/3.0/
+#
+# The visible attribution lives in the site footer (templates/homework/base.html).

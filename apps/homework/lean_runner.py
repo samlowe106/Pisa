@@ -34,6 +34,13 @@ def get_lean_executable() -> str:
     raise FileNotFoundError("Lean executable not found")
 
 
+def _sandbox_wrapper_failed(stderr: str | None) -> bool:
+    """True when the sandbox wrapper itself failed to start, so Lean never ran. Bubblewrap
+    prefixes its own errors with ``bwrap:`` (e.g. "bwrap: Failed to make / slave: Permission
+    denied" when Docker's default AppArmor profile blocks it)."""
+    return any(line.startswith("bwrap:") for line in (stderr or "").splitlines())
+
+
 def sanitize_lean_output(output: str, keep_internal: bool = False) -> str:
     if keep_internal or not output:
         return output or ""
@@ -72,7 +79,10 @@ def parse_lean_feedback(
                 continue
 
             lower = stripped.lower()
-            if lower.startswith("goal:"):
+            if stripped.startswith("bwrap:"):
+                # Sandbox-wrapper failure, not Lean output — never a "message".
+                errors.append(line)
+            elif lower.startswith("goal:"):
                 goals.append(stripped[len("goal:") :].strip())
             elif lower.startswith("msg:") or lower.startswith("message:"):
                 messages.append(stripped.split(":", 1)[1].strip())
@@ -158,6 +168,8 @@ def run_lean_process(code: str, extra: str = "") -> dict:
     - ``{"returncode": int, "stdout": str, "stderr": str}`` — Lean ran
     - ``{"timeout": True, "stdout": str, "stderr": str}`` — timed out (with partial output)
     - ``{"missing": True}`` — the Lean executable could not be found
+    - ``{"sandbox_error": True, "stdout": str, "stderr": str}`` — the sandbox wrapper failed
+      to start, so Lean never ran (a server problem, not a grading result)
     """
     workdir = None
     try:
@@ -201,6 +213,12 @@ def run_lean_process(code: str, extra: str = "") -> dict:
             except subprocess.TimeoutExpired:
                 stdout, stderr = "", ""
             return {"timeout": True, "stdout": stdout or "", "stderr": stderr or ""}
+        if process.returncode != 0 and _sandbox_wrapper_failed(stderr):
+            return {
+                "sandbox_error": True,
+                "stdout": stdout or "",
+                "stderr": stderr or "",
+            }
         return {
             "returncode": process.returncode,
             "stdout": stdout,
@@ -250,6 +268,17 @@ def grade_lean_submission(
             Submission.STATUS_ERROR,
             "Lean executable not found. Install Lean on the server or configure a Lean runtime.",
         )
+    if result.get("sandbox_error"):
+        msg = (
+            "The server's Lean sandbox failed to start, so your submission could not be "
+            "graded. This is a server problem, not an issue with your proof — please tell "
+            "your instructor."
+        )
+        if keep_internal:
+            detail = (result["stderr"] or result["stdout"]).strip()
+            if detail:
+                msg += "\n" + detail
+        return (Submission.STATUS_ERROR, msg)
     if result.get("timeout"):
         out = sanitize_lean_output(result["stdout"], keep_internal=keep_internal)
         err = sanitize_lean_output(result["stderr"], keep_internal=keep_internal)

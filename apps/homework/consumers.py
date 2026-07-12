@@ -37,6 +37,9 @@ _LEAN_HOLDERS: dict[int, str] = {}
 
 WS_CLOSE_BUSY = 4409
 WS_CLOSE_TAKEN_OVER = 4410
+# The `lean --server` process died under us (e.g. the sandbox failed to start). Server-sent
+# close codes must be 1000 or 3000-4999 (autobahn raises on the "internal error" code 1011).
+WS_CLOSE_LEAN_EXITED = 4500
 
 
 def _user_group(user_id: int) -> str:
@@ -185,7 +188,8 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
             proc.stdin.write(lean_lsp.frame(message))
             await proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError, RuntimeError):
-            await self.close(code=1011)
+            await self._send_status("error", "The Lean server process has exited.")
+            await self.close(code=WS_CLOSE_LEAN_EXITED)
 
     # -- browser -> Lean rewriting --------------------------------------------------------
 

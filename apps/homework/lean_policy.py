@@ -37,7 +37,7 @@ class Rule:
 
 
 RULES: list[Rule] = [
-    # --- Soundness / anti-cheat: pass without actually proving the goal ------------------
+    # region Soundness / anti-cheat: pass without actually proving the goal
     Rule("sorry", r"\bsorry\b", UNSOUND, "Admits any goal without proof."),
     Rule("admit", r"\badmit\b", UNSOUND, "Closes a goal without proving it."),
     Rule("axiom", r"\baxiom\b", UNSOUND, "Asserts a statement true without proof."),
@@ -60,7 +60,8 @@ RULES: list[Rule] = [
         UNSOUND,
         "Reflects compiled Bool evaluation into a proof.",
     ),
-    # --- System / IO (defense-in-depth above the OS sandbox) ----------------------------
+    # endregion
+    # region System / IO (defense-in-depth above the OS sandbox)
     Rule(
         "io_process",
         r"\bIO\.Process\b",
@@ -70,22 +71,26 @@ RULES: list[Rule] = [
     Rule("io_fs", r"\bIO\.FS\b", SYSTEM, "Reads or writes the filesystem."),
     Rule("system_ns", r"\bSystem\.", SYSTEM, "OS interaction (paths, env, …)."),
     Rule("extern", r"@\[\s*extern", SYSTEM, "Binds to native / FFI code."),
-    # --- Network ------------------------------------------------------------------------
+    # endregion
+    # region Network
     Rule("socket", r"\bSocket\b", NETWORK, "Opens network sockets."),
     Rule("http", r"\bHttp\b", NETWORK, "Makes HTTP requests."),
-    # --- Elaboration-time code execution ------------------------------------------------
+    # endregion
+    # region Elaboration-time code execution
     Rule(
         "eval", r"#eval\b", ESCAPE, "Runs arbitrary code (incl. IO) while elaborating."
     ),
     Rule("run_cmd", r"\brun_cmd\b", ESCAPE, "Runs arbitrary metaprogram commands."),
     Rule("init_attr", r"@\[\s*init\b", ESCAPE, "Runs an initialiser at load time."),
-    # --- Expense ------------------------------------------------------------------------
+    # endregion
+    # region Expense
     Rule(
         "max_heartbeats",
         r"set_option\s+maxHeartbeats",
         EXPENSIVE,
         "Raises or removes the elaboration time budget.",
     ),
+    # endregion
 ]
 
 

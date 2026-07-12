@@ -1,9 +1,15 @@
 {% extends 'homework/base.html' %}
+{% load thumbnail_presets %}
 
 {% block title %}Login – Pisa{% endblock %}
 
 {% block content %}
+{% thumbnail_preset "the-school-of-athens-by-raffaello-sanzio-da-urbino.jpg" as banner %}
 <div class="auth">
+    <div class="auth-banner">
+        <img src="{{ banner.url }}"
+             alt="The School of Athens — Raphael's fresco of ancient philosophers and mathematicians." />
+    </div>
     <c-page-header title="Login">
         <p class="meta">Sign in to access assignments and run Lean problems.</p>
     </c-page-header>
@@ -24,5 +30,6 @@
             <button class="button" type="submit">Login</button>
         </form>
     </c-card>
+    <c-image-credit :credit="banner.attribution" label="Banner" />
 </div>
 {% endblock %}

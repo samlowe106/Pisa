@@ -13,8 +13,6 @@ Network access is confined to ``fetch_image_info`` / ``pick_download_url`` / ``d
 resample — otherwise stdlib only.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import urllib.parse
@@ -45,7 +43,7 @@ _MIME_EXTENSIONS = {
 }
 
 
-# --- Title parsing (pure) ----------------------------------------------------------------
+# region Title parsing (pure)
 
 
 def parse_file_title(url_or_name: str) -> str:
@@ -90,7 +88,10 @@ def extension_for(url: str, mime: str = "") -> str:
     return _MIME_EXTENSIONS.get(mime, ".jpg")
 
 
-# --- Resolution choice (pure) ------------------------------------------------------------
+# endregion
+
+
+# region Resolution choice (pure)
 
 
 def best_thumb_width(
@@ -140,7 +141,10 @@ def best_thumb_width(
     return min(sorted(candidates), key=distance)
 
 
-# --- Attribution parsing (pure) ----------------------------------------------------------
+# endregion
+
+
+# region Attribution parsing (pure)
 
 
 class _ArtistParser(HTMLParser):
@@ -245,7 +249,10 @@ def build_attribution(
     return {key: value for key, value in sorted(fields.items()) if value}
 
 
-# --- Network -----------------------------------------------------------------------------
+# endregion
+
+
+# region Network
 
 
 @dataclass
@@ -352,3 +359,6 @@ def download_scaled(url: str, target_width: int, dest: Path) -> tuple[int, int]:
         else:
             resized.save(dest)
         return target_width, height
+
+
+# endregion

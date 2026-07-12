@@ -3,14 +3,13 @@ name = "pisa"
 version = "0.1.0"
 description = ""
 authors = [{ name = "Samuel Lowe", email = "samlowe106@gmail.com" }]
-requires-python = ">=3.10,<4"
+# Matches the interpreter the app actually runs on (.python-version, python:3.14-slim in the
+# Dockerfile) — and with 3.14's deferred annotations (PEP 649), `from __future__ import
+# annotations` is never needed.
+requires-python = ">=3.14,<4"
 readme = "README.md"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
@@ -58,6 +57,14 @@ omit = [
 show_missing = true
 # No `fail_under` yet: the suite has 0 tests, so a coverage gate would fail CI.
 # Raise this once a baseline test suite exists.
+
+[tool.black]
+# Pinned below the runtime version (3.14) on purpose: targeting py314+ makes black rewrite
+# `except (A, B):` into the unparenthesized PEP 758 form, and we prefer the conventional
+# parenthesized style. An explicit target also stops black inferring versions newer than the
+# running interpreter from requires-python, which trips its AST safety check ("Python 3.14
+# cannot parse code formatted for Python 3.15").
+target-version = ["py313"]
 
 [tool.mypy]
 # django-stubs teaches mypy about managers (.objects), field descriptors (a CharField is a

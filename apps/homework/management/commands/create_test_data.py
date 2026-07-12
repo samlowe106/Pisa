@@ -92,7 +92,7 @@ class Command(BaseCommand):
     help = "Seed development users, courses, assignments, problems, and submissions."
 
     def handle(self, *args, **options):
-        # --- Users (all share the password "password") -----------------------------------
+        # region Users (all share the password "password")
         teacher = self._user("teacher", is_staff=True)  # site admin
         instructor = self._user("instructor")  # course instructor, not an admin
         ta = self._user("ta")  # read-only course staff
@@ -101,16 +101,18 @@ class Command(BaseCommand):
         )  # enrolled in everything; gets a spread of grades
         student2 = self._user("student2")  # aces Intro to Lean
         student3 = self._user("student3")  # fails Intro to Lean
+        # endregion
 
-        # --- Lean source files imported by the MyNat problem -----------------------------
+        # region Lean source files imported by the MyNat problem
         definition_file = self._source_file(
             "mynat-definition", "MyNat Definition", DEFINITION_CONTENT, teacher
         )
         addition_file = self._source_file(
             "mynat-addition", "MyNat Addition", ADDITION_CONTENT, teacher
         )
+        # endregion
 
-        # --- Course 1: Intro to Lean (active, the main course) ---------------------------
+        # region Course 1: Intro to Lean (active, the main course)
         intro = self._course(
             "intro-lean",
             "Intro to Lean",
@@ -135,8 +137,9 @@ class Command(BaseCommand):
         self._assignment(
             intro, "wip-induction", "Induction (draft)", teacher, published=False
         )
+        # endregion
 
-        # --- Course 2: Proofs 101 (active, recent-submission scoring) ---------------------
+        # region Course 2: Proofs 101 (active, recent-submission scoring)
         proofs = self._course(
             "proofs-101",
             "Proofs 101",
@@ -150,8 +153,9 @@ class Command(BaseCommand):
             proofs, "logic-basics", "Logic basics", instructor, published=True
         )
         p_logic = self._simple_problem(logic, "And / Or", 1, TRIVIAL_CODE)
+        # endregion
 
-        # --- Course 3: Legacy Logic (inactive -> "Previous courses", custom grade bands) --
+        # region Course 3: Legacy Logic (inactive -> "Previous courses", custom grade bands)
         legacy = self._course(
             "legacy-logic",
             "Legacy Logic",
@@ -169,8 +173,9 @@ class Command(BaseCommand):
         p_legacy = self._simple_problem(
             archived, "Propositional logic", 1, TRIVIAL_CODE
         )
+        # endregion
 
-        # --- Submissions -> grades --------------------------------------------------------
+        # region Submissions -> grades
         # student: F in Intro (1/2), A in the other two -> shows the full colour range and an
         # open assignment. student2 aces Intro, student3 fails it -> real class averages.
         self._submit(student, p1, Submission.STATUS_PASSED)
@@ -181,6 +186,7 @@ class Command(BaseCommand):
         self._submit(student3, p2, Submission.STATUS_FAILED)
         self._submit(student, p_logic, Submission.STATUS_PASSED)
         self._submit(student, p_legacy, Submission.STATUS_PASSED)
+        # endregion
 
         self.stdout.write(
             self.style.SUCCESS(

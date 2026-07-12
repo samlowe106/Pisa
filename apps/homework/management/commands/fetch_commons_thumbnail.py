@@ -7,8 +7,6 @@ resolution (``apps.homework.commons.best_thumb_width``), downloads it into the p
 and writes the matching ``<name>.json`` sidecar that the course-form thumbnail picker credits from.
 """
 
-from __future__ import annotations
-
 import json
 import time
 from pathlib import Path

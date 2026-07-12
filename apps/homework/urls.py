@@ -7,7 +7,7 @@ app_name = "homework"
 urlpatterns = [
     path("", views.DashboardView.as_view(), name="dashboard"),
     path("grades/", views.GradesView.as_view(), name="grades"),
-    # --- Courses --------------------------------------------------------------------------
+    # region Courses
     path("courses/", views.CourseListView.as_view(), name="course_list"),
     path("courses/create/", views.CourseCreateView.as_view(), name="course_create"),
     # Specific course-scoped actions must precede the generic nested routes below so they
@@ -55,7 +55,8 @@ urlpatterns = [
     path(
         "courses/<slug:slug>/", views.CourseDetailView.as_view(), name="course_detail"
     ),
-    # --- Assignments + problems, nested under their course --------------------------------
+    # endregion
+    # region Assignments + problems, nested under their course
     path(
         "courses/<slug:course_slug>/<slug:assignment_slug>/",
         views.AssignmentDetailView.as_view(),
@@ -86,16 +87,19 @@ urlpatterns = [
         views.ProblemUpdateView.as_view(),
         name="problem_update",
     ),
-    # --- Student assignment index (assignments are created per-course) --------------------
+    # endregion
+    # region Student assignment index (assignments are created per-course)
     path("assignments/", views.AssignmentListView.as_view(), name="assignment_list"),
-    # --- Internal problem endpoints (kept keyed by id) ------------------------------------
+    # endregion
+    # region Internal problem endpoints (kept keyed by id)
     path("problems/<int:pk>/run/", views.ProblemRunView.as_view(), name="problem_run"),
     path(
         "problems/<int:pk>/submit/",
         views.ProblemSubmitView.as_view(),
         name="problem_submit",
     ),
-    # --- Lean source files ----------------------------------------------------------------
+    # endregion
+    # region Lean source files
     path(
         "lean-files/",
         views.LeanSourceFileListView.as_view(),
@@ -111,4 +115,5 @@ urlpatterns = [
         views.LeanSourceFileUpdateView.as_view(),
         name="lean_source_file_update",
     ),
+    # endregion
 ]

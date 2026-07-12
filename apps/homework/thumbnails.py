@@ -37,6 +37,17 @@ def _thumbnail_preset_attribution(key):
     return {}
 
 
+def thumbnail_preset(key):
+    """URL + attribution for one preset image by filename, for pages that use a specific
+    preset directly (e.g. the login banner). The URL is built whether or not the file has
+    been fetched yet; the attribution is ``{}`` until its sidecar exists."""
+    return {
+        "key": key,
+        "url": static(f"{THUMBNAIL_PRESET_DIR}/{key}"),
+        "attribution": _thumbnail_preset_attribution(key),
+    }
+
+
 def available_thumbnail_presets():
     """Preset thumbnails the site provides. Drop image files into
     ``static/homework/img/thumbnails/`` and they appear here automatically (keyed by filename);

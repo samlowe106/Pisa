@@ -8,6 +8,13 @@
 
     <title>{% block title %}Pisa Homework{% endblock %}</title>
 
+    {# Favicon set: see static/homework/img/favicon/sources.txt for provenance/attribution. #}
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'homework/img/favicon/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'homework/img/favicon/favicon-16x16.png' %}">
+    <link rel="shortcut icon" href="{% static 'homework/img/favicon/favicon.ico' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'homework/img/favicon/apple-touch-icon.png' %}">
+    <link rel="manifest" href="{% static 'homework/img/favicon/site.webmanifest' %}">
+
     <link rel="stylesheet" href="{% static 'homework/css/base.css' %}">
 
     {% if use_codemirror %}
@@ -72,6 +79,8 @@
     </main>
     <footer class="footer">
         Built by <a href="https://github.com/samlowe106/Pisa">Samuel Lowe</a> for instructors and students using Django and Lean.
+        Favicon from <a href="https://commons.wikimedia.org/wiki/File:The_Leaning_Tower_of_Pisa_SB.jpeg" target="_blank" rel="noopener noreferrer">The Leaning Tower of Pisa</a>
+        by Saffron Blaze (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 3.0</a>).
     </footer>
 </body>
 

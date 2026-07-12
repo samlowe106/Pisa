@@ -57,11 +57,11 @@
      * between parsed runner-output lines). Pass `goals: undefined` to leave the goals panel
      * untouched — the LSP path fills it asynchronously via $/lean/plainGoal.
      */
-    function renderPanels({ goals, messages, errors, sep = '\n' }) {
+    function renderPanels({ goals, messages, errors, errored = false, sep = '\n' }) {
         if (goals !== undefined) {
             if (goals.length) {
                 setGoals(goals.join(sep));
-            } else if (errors.length) {
+            } else if (errors.length || errored) {
                 // No goals, but the run errored — don't claim the proof is complete.
                 setGoals('No goals produced.');
             } else {
@@ -459,6 +459,9 @@
             goals: data.goals || [],
             messages: data.messages || [],
             errors: data.errors || [],
+            // A failed run with no parsed errors (e.g. the sandbox itself broke) must not
+            // render the celebratory empty-goals state.
+            errored: Boolean(data.error) || (data.returncode !== undefined && data.returncode !== 0),
         });
 
         const diagnostics = document.getElementById('lean-diagnostics');

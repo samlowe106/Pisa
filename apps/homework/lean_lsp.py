@@ -10,8 +10,6 @@ as ``assemble_lean_submission_source`` in homework/lean_runner.py. This module o
   dropping any diagnostics that land in the fixed prefix/suffix.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from dataclasses import dataclass

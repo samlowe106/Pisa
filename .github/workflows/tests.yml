@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Tests + coverage (in Docker)
+    name: Tests + coverage (Docker)
     permissions:
       contents: read
     runs-on: ubuntu-latest

@@ -46,13 +46,13 @@ repos:
       # value is irrelevant to type checking. pass_filenames: false → always check the whole
       # package, so a change in one module is re-checked against everything that imports it.
       - id: mypy
-        name: mypy (django-stubs)
+        name: mypy + django-stubs
         entry: env SECRET_KEY=mypy-typecheck uv run mypy apps pisa
         language: system
         types: [python]
         pass_filenames: false
       - id: scan-external-assets
-        name: Scan templates for unsafe external assets
+        name: Unsafe external asset scan
         entry: python scripts/scan_external_assets.py
         language: system
         files: \.(html|htm|js)$

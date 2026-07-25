@@ -1,0 +1,5 @@
+# Config for the hadolint pre-commit hook (Dockerfile linter).
+ignored:
+  # Requires apt pins like `bubblewrap=0.11.0-2`; Debian point releases churn and removed
+  # versions would break every rebuild. The base image + weekly Trivy scan cover this risk.
+  - DL3008

@@ -25,6 +25,8 @@ repos:
         files: \.json$
       - id: sort-simple-yaml
       - id: trailing-whitespace
+        # preserve Markdown hard line breaks (a line ending in two spaces)
+        args: [--markdown-linebreak-ext, "md,markdown"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.18
@@ -38,6 +40,13 @@ repos:
     hooks:
       - id: black
         args: [--safe]
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.14.0
+    hooks:
+      # Lints the Dockerfile (config in .hadolint.yaml); runs via Docker, so Docker must be
+      # available.
+      - id: hadolint-docker
 
   - repo: local
     hooks:

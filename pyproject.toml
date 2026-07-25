@@ -79,14 +79,32 @@ exclude = ['/migrations/']
 [tool.django-stubs]
 django_settings_module = "pisa.settings"
 
+[tool.ruff]
+# Django generates migrations; don't hold them to import-order/style rules.
+extend-exclude = ["*/migrations/*"]
+
 [tool.ruff.lint]
-# Ruff's defaults (E4/E7/E9/F) already keep *module-level* imports at the top of the file
-# (E402). PLC0415 extends that to forbid imports inside functions/methods, so every import
-# lives at the top of its file.
-extend-select = ["PLC0415"]
+# On top of Ruff's defaults (E4/E7/E9/F). Full list: https://docs.astral.sh/ruff/rules/
+extend-select = [
+    # Ruff's defaults already keep *module-level* imports at the top of the file (E402).
+    # PLC0415 extends that to forbid imports inside functions/methods, so every import
+    # lives at the top of its file.
+    "PLC0415",
+    "I",    # isort: import ordering
+    "UP",   # pyupgrade: modern syntax for the target Python version
+    "B",    # flake8-bugbear: likely bugs and footguns
+    "SIM",  # flake8-simplify: simpler equivalent code
+    "RET",  # flake8-return: return-statement hygiene
+    "LOG",  # flake8-logging: correct logging usage
+    "G",    # flake8-logging-format: no f-strings / % in log calls
+    "PERF", # perflint: performance anti-patterns
+    "T20",  # flake8-print: flags stray print()
+]
 
 [tool.ruff.lint.per-file-ignores]
 # Django's stock manage.py imports inside a try/except on purpose: the point is to catch the
 # ImportError and print a "did you forget to activate your virtualenv?" hint. Hoisting the import
 # to module level would turn that into a bare traceback, so PLC0415 is a false positive here.
 "manage.py" = ["PLC0415"]
+# Standalone CLI helpers: print *is* their output.
+"scripts/*" = ["T201"]

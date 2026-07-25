@@ -12,6 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_PYTHON_PREFERENCE=only-system \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
     PATH="/opt/venv/bin:/root/.elan/bin:/root/.local/bin:${PATH}"
 
 # Runtime system packages: bubblewrap for the Lean sandbox, ca-certificates so manage.py
@@ -30,6 +32,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # runs; the runtime stage copies out only the artifacts (/opt/venv, /root/.elan).
 FROM base AS build
 
+# Fail piped RUNs (curl | sh below) when the *left* side fails — without pipefail a failed
+# download feeds `sh` empty input, which exits 0 and silently skips the install.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -38,10 +44,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         git \
         unzip
 
-# uv (Python package manager) and the Lean toolchain (via elan).
+# The Lean toolchain (via elan).
 # elan-init is rustup-style: the unattended flag is `-y` (NOT `--yes`). With `--yes`
 # it can't recognize the request, tries to prompt, and fails in a non-interactive build.
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # elan only *records* the default toolchain; `lean --version` forces the actual toolchain
 # download so Lean is baked into this layer (otherwise `lean --server` would download
 # hundreds of MB on first use in every container, breaking live feedback).
@@ -57,6 +62,11 @@ RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init
     && rm -rf "$TOOLCHAIN"/lib/libLLVM* "$TOOLCHAIN"/lib/libclang* "$TOOLCHAIN"/lib/clang \
         "$TOOLCHAIN"/bin/llvm* "$TOOLCHAIN"/bin/clang* "$TOOLCHAIN"/bin/ld.lld* \
         "$TOOLCHAIN"/bin/leanc
+
+# uv (Python package manager), pinned by copying the binary from its official image —
+# reproducible builds, unlike `curl | sh` of whatever is latest. Placed *after* the Lean
+# layer so bumping the uv version doesn't invalidate the expensive toolchain download.
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 

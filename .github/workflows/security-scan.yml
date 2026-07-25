@@ -10,16 +10,24 @@ on:
     # code on a cadence — not only when something is pushed.
     - cron: "0 6 * * 1"
 
+# Cancel superseded in-progress runs for the same branch / PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege by default; jobs that upload SARIF opt into security-events below.
 permissions:
   contents: read
-  security-events: write # required to upload SARIF to code scanning
 
 jobs:
   scan-external-assets:
     name: Scan for unsafe external assets
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # required to upload SARIF to code scanning
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
@@ -43,10 +51,12 @@ jobs:
     name: Audit dependencies for known CVEs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
 
       # Audit the locked *production* dependencies (the set actually shipped, dev tooling
       # excluded). --frozen fails if the lockfile is stale rather than silently resolving anew.
@@ -57,3 +67,73 @@ jobs:
       # available yet, accept it explicitly with `--ignore-vuln <ID>`.
       - name: pip-audit
         run: uvx pip-audit -r requirements.txt
+
+  scan-container-image:
+    name: Audit container image for OS-level CVEs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # required to upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Build the shipped runtime image, reusing the same GHA layer cache as tests.yml so the
+      # heavy layers (apt, the Lean toolchain) are normally cache hits.
+      - name: Build runtime image (cached)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          load: true
+          tags: pisa-runtime:scan
+          cache-from: type=gha
+          # Only write the cache from main (see tests.yml).
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max' || '' }}
+
+      # pip-audit (above) covers Python packages; this covers the OS layer — the Debian
+      # packages in python:3.14-slim plus everything the Dockerfile apt-installs.
+      # `ignore-unfixed` keeps the gate actionable: an advisory Debian hasn't fixed yet can't
+      # be remediated by rebuilding, so it doesn't fail the job — but the moment a fix ships,
+      # the job fails until the base image is re-pulled and rebuilt. All findings (fixed or
+      # not) still land in the SARIF for the Security tab.
+      - name: Trivy scan (OS packages, CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: pisa-runtime:scan
+          scanners: vuln
+          vuln-type: os
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: container-image
+
+  # Static analysis of the source for security issues (results in the Security tab).
+  # Free on public repos; private repos need GitHub Advanced Security.
+  codeql:
+    name: CodeQL static analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          # Both the Django app and the frontend JS under static/homework/js.
+          languages: python,javascript
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4

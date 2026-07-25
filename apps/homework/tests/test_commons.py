@@ -424,6 +424,5 @@ class FetchCommandTests(SimpleTestCase):
             mocks["download"].assert_called_once()  # only Big was downloaded
 
     def test_from_file_missing_manifest_is_an_error(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(CommandError):
-                self._run("--from-file", str(Path(tmp) / "nope.txt"), "--dir", tmp)
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(CommandError):
+            self._run("--from-file", str(Path(tmp) / "nope.txt"), "--dir", tmp)

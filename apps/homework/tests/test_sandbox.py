@@ -17,11 +17,26 @@ from apps.homework.lean_runner import run_lean_process
 from .utils import requires_bwrap, requires_lean
 
 # The production default wrapper (bubblewrap) — used directly so the tests pin real behaviour.
-BWRAP = (
-    "bwrap --unshare-all --die-with-parent --new-session "
-    "--ro-bind / / --dev /dev --proc /proc --tmpfs /tmp "
-    "--bind {workdir} {workdir} --chdir {workdir}"
-).split()
+BWRAP = [
+    "bwrap",
+    "--unshare-all",
+    "--die-with-parent",
+    "--new-session",
+    "--ro-bind",
+    "/",
+    "/",
+    "--dev",
+    "/dev",
+    "--proc",
+    "/proc",
+    "--tmpfs",
+    "/tmp",
+    "--bind",
+    "{workdir}",
+    "{workdir}",
+    "--chdir",
+    "{workdir}",
+]
 
 
 class SandboxMechanicsTests(SimpleTestCase):
@@ -86,7 +101,8 @@ class SandboxMechanicsTests(SimpleTestCase):
             child_pid = None
             for _ in range(200):  # wait up to ~2s for the child to spawn
                 if os.path.exists(pidfile) and os.path.getsize(pidfile):
-                    child_pid = int(open(pidfile).read())
+                    with open(pidfile) as f:
+                        child_pid = int(f.read())
                     break
                 subprocess.run(["sleep", "0.01"])
             self.assertIsNotNone(child_pid)

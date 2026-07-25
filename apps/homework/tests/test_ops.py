@@ -5,10 +5,10 @@ import importlib
 import os
 from unittest import mock
 
-import pisa.settings as settings_module
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, SimpleTestCase, TestCase
 
+import pisa.settings as settings_module
 from apps.homework.context_processors import roles
 from apps.homework.models import Course
 from apps.homework.reporting import course_cards_for

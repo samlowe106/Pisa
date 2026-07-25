@@ -6,8 +6,8 @@ import unittest
 
 from django.contrib.auth import get_user_model
 
-from apps.homework.models import Assignment, Course, Problem, ProblemBlock
 from apps.homework.lean_runner import get_lean_executable
+from apps.homework.models import Assignment, Course, Problem, ProblemBlock
 
 User = get_user_model()
 
@@ -56,8 +56,7 @@ def make_role_matrix():
     """
 
     def user(username, **extra):
-        u = User.objects.create_user(username=username, password="pw", **extra)
-        return u
+        return User.objects.create_user(username=username, password="pw", **extra)
 
     admin = user("t_admin", is_staff=True)
     instructor = user("t_instructor")

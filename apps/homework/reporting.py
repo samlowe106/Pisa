@@ -325,7 +325,7 @@ def compare_two_sections(course_a, course_b, counts_a, counts_b):
     adjusted = stats.false_discovery_control(
         [per_assignment[i]["scores"].welch.pvalue for i in comparable]
     )
-    for i, adj in zip(comparable, adjusted):
+    for i, adj in zip(comparable, adjusted, strict=True):
         per_assignment[i]["adj_pvalue"] = adj
 
     return {

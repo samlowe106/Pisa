@@ -14,6 +14,7 @@ Two layers, both gated by ``LEAN_SANDBOX_ENABLED``:
   filesystem, only the per-execution temp dir writable). Set it empty to disable.
 """
 
+import contextlib
 import os
 import re
 import signal
@@ -65,10 +66,9 @@ def _build_preexec(cpu_seconds):
         if max_processes:
             limits.append((resource.RLIMIT_NPROC, max_processes))
         for which, value in limits:
-            try:
+            # Best-effort: never block the exec on a limit we couldn't set.
+            with contextlib.suppress(ValueError, OSError):
                 resource.setrlimit(which, (value, value))
-            except (ValueError, OSError):
-                pass  # best-effort: never block the exec on a limit we couldn't set
 
     return _apply
 
@@ -106,7 +106,5 @@ def kill_process_group(proc) -> None:
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except (ProcessLookupError, PermissionError, OSError):
-        try:
+        with contextlib.suppress(OSError):
             proc.kill()
-        except OSError:
-            pass

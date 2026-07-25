@@ -3,10 +3,10 @@
 Helper script to find and test Lean LSP command.
 """
 
-import subprocess
-import shutil
-import sys
 import os
+import shutil
+import subprocess
+import sys
 
 
 def find_lean_lsp():

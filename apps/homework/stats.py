@@ -14,9 +14,10 @@ number across page loads. Bump ``DEFAULT_RESAMPLES`` for tighter p-values at som
 
 import math
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass
 from statistics import fmean
-from typing import NamedTuple, Sequence
+from typing import NamedTuple
 
 DEFAULT_RESAMPLES = 5000
 DEFAULT_SEED = 1_234_567
@@ -120,7 +121,7 @@ def mannwhitneyu(x, y, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
 def chi2_statistic(table):
     """Pearson χ² statistic for an r×c table of counts."""
     row_totals = [sum(row) for row in table]
-    col_totals = [sum(col) for col in zip(*table)]
+    col_totals = [sum(col) for col in zip(*table, strict=True)]
     n = sum(row_totals)
     if n == 0:
         return 0.0

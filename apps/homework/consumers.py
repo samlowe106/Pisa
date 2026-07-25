@@ -13,6 +13,7 @@ See homework/lean_lsp.py for the framing/assembly/remapping helpers.
 """
 
 import asyncio
+import contextlib
 import json
 import shlex
 import shutil
@@ -148,10 +149,8 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
                 task.cancel()
         proc = getattr(self, "process", None)
         if proc:
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 proc.kill()
-            except ProcessLookupError:
-                pass
         self._cleanup_tmp()
 
     async def lean_evict(self, event):

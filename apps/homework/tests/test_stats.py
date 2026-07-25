@@ -64,7 +64,7 @@ class StatisticTests(SimpleTestCase):
         ps = [0.9, 0.001, 0.5, 0.02]
         adjusted = stats.false_discovery_control(ps)
         self.assertTrue(all(0 <= p <= 1 for p in adjusted))
-        self.assertTrue(all(adj >= raw for adj, raw in zip(adjusted, ps)))
+        self.assertTrue(all(adj >= raw for adj, raw in zip(adjusted, ps, strict=True)))
 
 
 class PermutationPValueTests(SimpleTestCase):

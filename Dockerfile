@@ -18,12 +18,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:/opt/elan/bin:${PATH}"
 
 # Runtime system packages: bubblewrap for the Lean sandbox, ca-certificates so manage.py
-# fetch_commons_thumbnail can talk HTTPS. BuildKit cache mounts keep the apt archives warm
-# across rebuilds; removing docker-clean lets apt actually reuse them.
+# fetch_commons_thumbnail can talk HTTPS. `apt-get upgrade` pulls in Debian security patches
+# for packages already in the base image (e.g. util-linux) that `install` alone wouldn't touch,
+# since they're not new dependencies of anything being installed here. BuildKit cache mounts
+# keep the apt archives warm across rebuilds; removing docker-clean lets apt actually reuse them.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean \
-    && apt-get update && apt-get install -y --no-install-recommends \
+    && apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
         ca-certificates \
         bubblewrap
 
@@ -114,7 +116,7 @@ RUN chown app:app /app
 COPY --chown=app:app . /app
 RUN chmod +x /app/scripts/entrypoint.sh
 
-USER app
+USER 1000:1000
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 # Production default: serve over ASGI (WebSockets + HTTP) with daphne. The dev compose
 # overrides this with `runserver` for autoreload.
@@ -124,9 +126,9 @@ CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "pisa.asgi:application"]
 # --- test: runtime + dev tooling (coverage). Built by CI (--target test). ---
 FROM runtime AS test
 
-# runtime already dropped to USER app; only root can write into the /opt/venv COPY destination.
-USER root
+# runtime already dropped to non-root; only root can write into the /opt/venv COPY destination.
+USER 0:0
 COPY --from=build-dev --chown=app:app /opt/venv /opt/venv
-USER app
+USER 1000:1000
 # Default command runs the suite under coverage; CI overrides to also emit reports.
 CMD ["coverage", "run", "manage.py", "test", "--verbosity=2"]

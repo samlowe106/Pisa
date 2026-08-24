@@ -126,8 +126,7 @@ class Command(BaseCommand):
             help="Show what would be downloaded + the sidecar, without writing anything.",
         )
 
-    # args is part of Django's fixed handle() signature; this command only uses **options.
-    def handle(self, *args, **options):  # noqa: ARG002
+    def handle(self, **options):
         out_dir = Path(options["directory"]) if options["directory"] else _default_dir()
 
         urls = list(options["urls"])

@@ -305,22 +305,18 @@ class CourseRenewView(LoginRequiredMixin, View):
 
     template_name = "homework/course_renew.html"
 
-    def _course(self):
-        return get_object_or_404(
-            editable_courses(self.request.user), slug=self.kwargs["slug"]
-        )
+    def _course(self, slug):
+        return get_object_or_404(editable_courses(self.request.user), slug=slug)
 
-    # slug arrives via the URL pattern (Django's View.dispatch passes it positionally);
-    # _course() reads it back from self.kwargs instead.
-    def get(self, request, slug):  # noqa: ARG002
+    def get(self, request, slug):
         return render(
             request,
             self.template_name,
-            {"course": self._course(), "form": CourseRenewForm()},
+            {"course": self._course(slug), "form": CourseRenewForm()},
         )
 
-    def post(self, request, slug):  # noqa: ARG002
-        course = self._course()
+    def post(self, request, slug):
+        course = self._course(slug)
         form = CourseRenewForm(request.POST)
         if not form.is_valid():
             return render(request, self.template_name, {"course": course, "form": form})

@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover - non-POSIX
     resource = None
 
 
-def _conf(name, default):
+def _conf(name, *, default):
     return getattr(settings, name, default)
 
 
@@ -36,10 +36,10 @@ def sandbox_env() -> dict:
     those whose name matches a sensitive pattern (secrets, passwords, tokens, DB URLs), which
     keeps HOME / PATH / ELAN_HOME so the toolchain still resolves. Set LEAN_SANDBOX_ALLOW_ENV
     to switch to a strict allowlist instead."""
-    allow = _conf("LEAN_SANDBOX_ALLOW_ENV", None)
+    allow = _conf("LEAN_SANDBOX_ALLOW_ENV", default=None)
     if allow:
         return {key: os.environ[key] for key in allow if key in os.environ}
-    patterns = _conf("LEAN_SANDBOX_DENY_ENV", None) or []
+    patterns = _conf("LEAN_SANDBOX_DENY_ENV", default=None) or []
     deny = re.compile("|".join(patterns), re.IGNORECASE) if patterns else None
     return {
         key: value
@@ -49,9 +49,9 @@ def sandbox_env() -> dict:
 
 
 def _build_preexec(cpu_seconds):
-    memory_mb = _conf("LEAN_SANDBOX_MEMORY_MB", 0)
-    fsize_mb = _conf("LEAN_SANDBOX_FSIZE_MB", 0)
-    max_processes = _conf("LEAN_SANDBOX_MAX_PROCESSES", 0)
+    memory_mb = _conf("LEAN_SANDBOX_MEMORY_MB", default=0)
+    fsize_mb = _conf("LEAN_SANDBOX_FSIZE_MB", default=0)
+    max_processes = _conf("LEAN_SANDBOX_MAX_PROCESSES", default=0)
 
     def _apply():  # runs in the child after fork(), before exec()
         if resource is None:
@@ -79,8 +79,7 @@ def popen_kwargs(cpu_seconds=None) -> dict:
     sandbox is enabled. Pass ``cpu_seconds=None`` for long-lived processes (the LSP server) so
     they aren't killed by a CPU-time cap."""
     kwargs: dict = {"start_new_session": True}
-    # _conf(name, default) mirrors getattr(obj, name, default), not a boolean-flag API.
-    if _conf("LEAN_SANDBOX_ENABLED", True):  # noqa: FBT003
+    if _conf("LEAN_SANDBOX_ENABLED", default=True):
         kwargs["env"] = sandbox_env()
         if resource is not None:
             kwargs["preexec_fn"] = _build_preexec(cpu_seconds)
@@ -93,9 +92,9 @@ def wrap_argv(argv, *, workdir=None) -> list:
     directory the Lean file lives in), so a read-only-filesystem sandbox (bubblewrap) can still
     bind that one directory in (e.g. ``--bind {workdir} {workdir} --chdir {workdir}``).
     """
-    if not _conf("LEAN_SANDBOX_ENABLED", True):  # noqa: FBT003
+    if not _conf("LEAN_SANDBOX_ENABLED", default=True):
         return list(argv)
-    wrapper = _conf("LEAN_SANDBOX_WRAPPER", None) or []
+    wrapper = _conf("LEAN_SANDBOX_WRAPPER", default=None) or []
     if workdir is not None:
         wrapper = [token.replace("{workdir}", str(workdir)) for token in wrapper]
     return list(wrapper) + list(argv)

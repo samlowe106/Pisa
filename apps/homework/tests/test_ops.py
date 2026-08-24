@@ -64,8 +64,8 @@ class SelfHostSettingsTests(SimpleTestCase):
 
     def test_production_hardening_when_debug_off(self):
         reloaded = self._reload(DEBUG="0", PISA_DOMAIN="")
-        self.assertIs(reloaded.SESSION_COOKIE_SECURE, True)  # noqa: FBT003
-        self.assertIs(reloaded.CSRF_COOKIE_SECURE, True)  # noqa: FBT003
+        self.assertTrue(reloaded.SESSION_COOKIE_SECURE)
+        self.assertTrue(reloaded.CSRF_COOKIE_SECURE)
         self.assertEqual(
             reloaded.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https")
         )

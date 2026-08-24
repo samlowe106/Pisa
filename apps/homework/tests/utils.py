@@ -13,10 +13,9 @@ User = get_user_model()
 
 
 def _lean_available():
-    # "Lean isn't installed here" is a routine, expected state, not a bug to report.
     try:
         get_lean_executable()
-    except Exception:  # noqa: BLE001
+    except FileNotFoundError:
         return False
     else:
         return True

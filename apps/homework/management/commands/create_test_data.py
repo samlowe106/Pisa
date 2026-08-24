@@ -93,8 +93,9 @@ TRIVIAL_CODE = "example : True := trivial\n"
 class Command(BaseCommand):
     help = "Seed development users, courses, assignments, problems, and submissions."
 
-    # args/options are part of Django's fixed handle() signature; this command takes neither.
-    def handle(self, *args, **options):  # noqa: ARG002
+    # Django's BaseCommand.execute() always passes the parser's common options
+    # (verbosity, traceback, etc.) as keyword arguments; this command ignores all of them.
+    def handle(self, **options):  # noqa: ARG002
         # region Users (all share the password "password")
         teacher = self._user("teacher", is_staff=True)  # site admin
         instructor = self._user("instructor")  # course instructor, not an admin

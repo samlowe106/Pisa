@@ -1,7 +1,7 @@
 # Wikimedia Commons sources for the course-thumbnail presets in this directory.
 #
 # The images themselves (and their .json attribution sidecars and originals/) are NOT in
-# version control — fetch them with:
+# version control: fetch them with:
 #
 #     manage.py fetch_commons_thumbnail --from-file
 #

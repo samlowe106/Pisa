@@ -30,7 +30,7 @@
             {% elif field.name == 'grade_b_min' or field.name == 'grade_c_min' or field.name == 'grade_d_min' %}
             {% elif field.name == 'grade_a_min' %}
             <div class="grade-bands-block">
-                <label class="grade-bands-label">Grade bands — minimum % per letter (F is below D)</label>
+                <label class="grade-bands-label">Grade bands: minimum % per letter (F is below D)</label>
                 <div class="grade-bands">
                     {% for bf in form %}{% if bf.name == 'grade_a_min' or bf.name == 'grade_b_min' or bf.name == 'grade_c_min' or bf.name == 'grade_d_min' %}<span class="grade-band-field"><label for="{{ bf.id_for_label }}">{{ bf.label }} ≥</label>{{ bf }}</span>{% endif %}{% endfor %}
                 </div>

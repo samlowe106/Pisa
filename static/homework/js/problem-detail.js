@@ -39,7 +39,7 @@
     }
 
     // Shown when Lean reports no remaining goals; also the trigger for the green "complete" styling.
-    const GOALS_COMPLETE_MESSAGE = 'No goals — proof complete! 🎉';
+    const GOALS_COMPLETE_MESSAGE = 'No goals, proof complete!';
 
     // Write the Goals body and tint its section green only when the proof is complete.
     function setGoals(text) {
@@ -55,14 +55,14 @@
      * diagnostics and the run/submit HTTP response so the two paths (and their empty-state
      * wording) can't drift apart. `sep` joins entries ('\n\n' between LSP diagnostics, '\n'
      * between parsed runner-output lines). Pass `goals: undefined` to leave the goals panel
-     * untouched — the LSP path fills it asynchronously via $/lean/plainGoal.
+     * untouched: the LSP path fills it asynchronously via $/lean/plainGoal.
      */
     function renderPanels({ goals, messages, errors, errored = false, sep = '\n' }) {
         if (goals !== undefined) {
             if (goals.length) {
                 setGoals(goals.join(sep));
             } else if (errors.length || errored) {
-                // No goals, but the run errored — don't claim the proof is complete.
+                // No goals, but the run errored: don't claim the proof is complete.
                 setGoals('No goals produced.');
             } else {
                 setGoals(GOALS_COMPLETE_MESSAGE);
@@ -218,7 +218,7 @@
                     }
                     this.locked = true;
                     showLeanLock(message.pisa.reason);
-                    setLeanStatus('Paused — open in another window');
+                    setLeanStatus('Paused: open in another window');
                     // Poll so this tab auto-promotes when the holding window releases the slot.
                     this.startPolling();
                     return;
@@ -263,7 +263,7 @@
             const others = diagnostics.filter((d) => d.severity !== 1);
             renderPanels({ messages: others.map(format), errors: errors.map(format), sep: '\n\n' });
             setLeanStatus(errors.length ? `${errors.length} error${errors.length > 1 ? 's' : ''}` : 'No errors');
-            // Diagnostics settled — refresh the goal at the cursor.
+            // Diagnostics settled: refresh the goal at the cursor.
             this.requestGoals();
         }
 

@@ -5,7 +5,7 @@ picker automatically (keyed by filename); an optional ``<name>.json`` sidecar ne
 carries its attribution (see ``static/homework/img/thumbnails/README.md`` and the
 ``fetch_commons_thumbnail`` management command).
 
-This module must stay free of model imports — ``models.py`` imports it for
+This module must stay free of model imports: ``models.py`` imports it for
 ``Course.thumbnail_url`` / ``Course.thumbnail_credit``.
 """
 

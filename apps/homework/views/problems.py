@@ -83,7 +83,7 @@ def build_problem_pager(number: int, total: int) -> dict | None:
 
     Shows a 3-wide window of problem numbers around the current one, snapped to the ends so
     the actual first/last numbers appear (rather than an ellipsis) when the window is already
-    against that edge. The "First"/"Last" jump links — each paired with an ellipsis — appear
+    against that edge. The "First"/"Last" jump links, each paired with an ellipsis, appear
     only when the window does not already reach that edge, and an edge that is only one step
     away is absorbed into the window so we never render an ellipsis that hides nothing.
     """
@@ -249,7 +249,7 @@ class ProblemRunView(View):
             response = build_lean_run_response(
                 {
                     "error": "The server's Lean sandbox failed to start, so Lean could not "
-                    "run. This is a server problem — please tell your instructor.",
+                    "run. This is a server problem. Please tell your instructor.",
                     "stdout": result["stdout"],
                     "stderr": result["stderr"],
                 },

@@ -1,4 +1,4 @@
-"""Coverage for apps/homework/views/problems.py and lean_runner.py — the pure helpers (pager,
+"""Coverage for apps/homework/views/problems.py and lean_runner.py: the pure helpers (pager,
 Lean-output parsing, executable resolution) and the run/submit/detail request handlers.
 """
 

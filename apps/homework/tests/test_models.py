@@ -16,7 +16,12 @@ from apps.homework.models import (
     validate_assignment_slug,
     validate_course_slug,
 )
-from apps.homework.ops import _unique_course_slug, course_family, renew_course
+from apps.homework.ops import (
+    _unique_course_slug,
+    course_family,
+    course_lineage_tree,
+    renew_course,
+)
 from apps.homework.selectors import (
     accessible_problems,
     editable_assignments,
@@ -223,6 +228,65 @@ class CourseFamilyTests(TestCase):
         # Asking any member returns the whole lineage, oldest first.
         for member in (root, gen2, gen3):
             self.assertEqual(course_family(member), [root, gen2, gen3])
+
+    def test_family_handles_branching_renewals(self):
+        # Two sections renewed from the same root: a family isn't just a chain.
+        m = make_role_matrix()
+        root = m["course"]
+        branch_a = renew_course(
+            root, term="TA", section="A", created_by=m["instructor"]
+        )
+        branch_b = renew_course(
+            root, term="TB", section="B", created_by=m["instructor"]
+        )
+        for member in (root, branch_a, branch_b):
+            family = course_family(member)
+            self.assertEqual(set(family), {root, branch_a, branch_b})
+            self.assertEqual(family[0], root)  # still oldest first
+
+
+class CourseLineageTreeTests(TestCase):
+    def test_standalone_course_has_no_tree(self):
+        m = make_role_matrix()
+        self.assertIsNone(course_lineage_tree(m["course"]))
+
+    def test_linear_chain_nests_three_deep(self):
+        m = make_role_matrix()
+        root = m["course"]
+        gen2 = renew_course(root, term="T2", section="", created_by=m["instructor"])
+        gen3 = renew_course(gen2, term="T3", section="", created_by=m["instructor"])
+
+        # Asking from any member returns the same tree, rooted at the earliest offering.
+        for member in (root, gen2, gen3):
+            tree = course_lineage_tree(member)
+            self.assertEqual(tree["course"], root)
+            self.assertEqual(tree["depth"], 0)
+            self.assertEqual(len(tree["children"]), 1)
+            child = tree["children"][0]
+            self.assertEqual(child["course"], gen2)
+            self.assertEqual(child["depth"], 1)
+            self.assertEqual(len(child["children"]), 1)
+            grandchild = child["children"][0]
+            self.assertEqual(grandchild["course"], gen3)
+            self.assertEqual(grandchild["depth"], 2)
+            self.assertEqual(grandchild["children"], [])
+
+    def test_branching_family_has_two_children_at_the_root(self):
+        m = make_role_matrix()
+        root = m["course"]
+        branch_a = renew_course(
+            root, term="TA", section="A", created_by=m["instructor"]
+        )
+        branch_b = renew_course(
+            root, term="TB", section="B", created_by=m["instructor"]
+        )
+
+        tree = course_lineage_tree(root)
+        self.assertEqual(tree["course"], root)
+        child_courses = {node["course"] for node in tree["children"]}
+        self.assertEqual(child_courses, {branch_a, branch_b})
+        for child in tree["children"]:
+            self.assertEqual(child["depth"], 1)
 
 
 class VisibilityHelperTests(TestCase):

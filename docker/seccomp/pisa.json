@@ -1,0 +1,50 @@
+{
+  "_comment": "Tighter-than-unconfined, NOT equivalent to Docker's own default profile. Docker's default is default-deny with a large explicit allowlist; that allowlist is generated from Go source at daemon startup and isn't available as a static file to diff against (see TODO.md), so this profile takes the opposite shape: default-ALLOW plus an explicit deny-list of syscalls a sandboxed or compromised Lean process has no legitimate reason to use. bubblewrap (apps/homework/sandbox.py) still needs the unshare/clone/mount family, which stays allowed here; Docker's own default profile is what blocks those and is why the compose files run with seccomp:unconfined today. Every entry below is denied with EPERM, verified against apps/homework/tests/test_sandbox.py running inside a container built with this profile in place of unconfined.",
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "syscalls": [
+    {
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Process introspection/manipulation: lets a compromised process attach to and control sibling processes.",
+      "errnoRet": 1,
+      "names": [
+        "ptrace",
+        "process_vm_readv",
+        "process_vm_writev"
+      ]
+    },
+    {
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Kernel-level backdoors: no sandboxed process should ever load code into the kernel or eBPF VM.",
+      "errnoRet": 1,
+      "names": [
+        "bpf",
+        "init_module",
+        "finit_module",
+        "delete_module",
+        "kexec_load",
+        "kexec_file_load"
+      ]
+    },
+    {
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Kernel keyring: no legitimate use inside a Lean sandbox, a known privilege-escalation surface.",
+      "errnoRet": 1,
+      "names": [
+        "add_key",
+        "request_key",
+        "keyctl"
+      ]
+    },
+    {
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Historical container-escape / info-leak vectors.",
+      "errnoRet": 1,
+      "names": [
+        "open_by_handle_at",
+        "perf_event_open",
+        "syslog",
+        "acct"
+      ]
+    }
+  ]
+}

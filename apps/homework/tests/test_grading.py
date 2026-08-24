@@ -4,7 +4,7 @@ Two enforcement layers are exercised:
 
 * the cheap pre-run text scan (``lean_policy.scan``) that rejects disallowed constructs in the
   *student's* editable code before Lean runs, and
-* the un-evadable ``#print axioms`` backstop (``forbidden_axioms``) that audits a real compile —
+* the un-evadable ``#print axioms`` backstop (``forbidden_axioms``) that audits a real compile:
   it catches ``sorry`` even when the text scan is told to allow it (``@requires_lean``).
 
 Most tests need neither Lean nor a DB; the backstop tests use real Lean (skip otherwise).
@@ -28,7 +28,7 @@ SORRY_REJECTION = "relies on `sorry`"
 
 
 class PolicyScanTests(SimpleTestCase):
-    """``lean_policy.scan`` — the literal pre-run text scan over student code."""
+    """``lean_policy.scan``: the literal pre-run text scan over student code."""
 
     def _ids(self, code, **kwargs):
         return {rule.id for rule in lean_policy.scan(code, **kwargs)}
@@ -54,7 +54,7 @@ class PolicyScanTests(SimpleTestCase):
 
 
 class AxiomBackstopParsingTests(SimpleTestCase):
-    """``parse_axioms`` / ``forbidden_axioms`` — the post-compile soundness audit."""
+    """``parse_axioms`` / ``forbidden_axioms``: the post-compile soundness audit."""
 
     def test_parse_axioms_reads_the_report(self):
         out = "'t' depends on axioms: [propext, Classical.choice]"
@@ -176,7 +176,7 @@ class AssembleSubmissionSourceTests(TestCase):
 
 
 class GradePreScanTests(TestCase):
-    """``grade_lean_submission`` gates that fire *before* Lean runs — no Lean needed."""
+    """``grade_lean_submission`` gates that fire *before* Lean runs, no Lean needed."""
 
     def setUp(self):
         self.m = make_role_matrix()

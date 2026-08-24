@@ -51,7 +51,7 @@ def renew_course(course, *, term, section, created_by):
             description=assignment.description,
             created_by=created_by,
             is_published=assignment.is_published,
-            due_date=None,  # new term — instructor sets fresh due dates
+            due_date=None,  # new term: instructor sets fresh due dates
         )
         new_assignment.source_files.set(assignment.source_files.all())
 
@@ -85,8 +85,8 @@ def renew_course(course, *, term, section, created_by):
 
 
 def course_family(course):
-    """Every offering (section) in ``course``'s renew lineage — the root of the chain and all
-    of its descendants — oldest first. A standalone course is a family of one."""
+    """Every offering (section) in ``course``'s renew lineage: the root of the chain and all
+    of its descendants, oldest first. A standalone course is a family of one."""
     root = course
     guard = 0
     while root.renewed_from_id and guard < 1000:
@@ -104,3 +104,31 @@ def course_family(course):
         queue.extend(current.renewals.all())
     family.sort(key=lambda offering: offering.created_at)
     return family
+
+
+def course_lineage_tree(course):
+    """``course``'s renewal lineage as a nested tree rooted at the earliest offering, or
+    ``None`` for a standalone course (nothing to draw). Each node is
+    ``{"course": Course, "depth": int, "children": [node, ...]}``, ``depth`` counting
+    generations from the root.
+    """
+    family = course_family(course)
+    if len(family) < 2:
+        return None
+
+    nodes = {
+        offering.pk: {"course": offering, "depth": 0, "children": []}
+        for offering in family
+    }
+    root = None
+    # family is oldest-first, so a course's renewed_from node is always already built by the
+    # time we reach it here.
+    for offering in family:
+        node = nodes[offering.pk]
+        if offering.renewed_from_id and offering.renewed_from_id in nodes:
+            parent = nodes[offering.renewed_from_id]
+            node["depth"] = parent["depth"] + 1
+            parent["children"].append(node)
+        else:
+            root = node
+    return root

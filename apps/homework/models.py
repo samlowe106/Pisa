@@ -74,7 +74,7 @@ class Course(models.Model):
     grade_c_min = models.PositiveSmallIntegerField(default=70)
     grade_d_min = models.PositiveSmallIntegerField(default=60)
     # Offering identity: which run of the course this is, and the offering it was renewed from
-    # (its previous term/section) — see ops.renew_course().
+    # (its previous term/section): see ops.renew_course().
     term = models.CharField(max_length=60, blank=True, help_text="e.g. “Summer 2026”.")
     section = models.CharField(
         max_length=60, blank=True, help_text="e.g. “Section 002”."
@@ -154,7 +154,7 @@ class Course(models.Model):
         return bool(user.is_staff)
 
     def role_of(self, user):
-        """The user's effective role label, or None — for display only."""
+        """The user's effective role label, or None: for display only."""
         if user.is_staff:
             return "admin"
         if self.instructors.filter(pk=user.pk).exists():
@@ -277,7 +277,7 @@ class Problem(models.Model):
         blank=True,
         help_text=(
             "Comma-separated extra axioms the proof may depend on, beyond Lean's standard "
-            "sound ones (propext, Classical.choice, Quot.sound) — e.g. axioms this problem "
+            "sound ones (propext, Classical.choice, Quot.sound): e.g. axioms this problem "
             "provides."
         ),
     )

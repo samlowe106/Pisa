@@ -26,7 +26,7 @@ _BATCH_DELAY_SECONDS = 1.0
 ORIGINALS_SUBDIR = "originals"
 
 # Default manifest name for --from-file: the version-controlled list of Commons references the
-# presets are fetched from (the images themselves are gitignored — re-fetch, don't commit).
+# presets are fetched from (the images themselves are gitignored; re-fetch, don't commit).
 SOURCES_FILENAME = "sources.txt"
 
 
@@ -153,7 +153,7 @@ class Command(BaseCommand):
                 Exception
             ) as exc:  # noqa: BLE001 - one bad page shouldn't abort the batch
                 failures += 1
-                self.stderr.write(self.style.ERROR(f"✗ {url}: {exc}"))
+                self.stderr.write(self.style.ERROR(f"FAILED: {url}: {exc}"))
 
         if failures:
             raise CommandError(f"{failures} of {len(urls)} reference(s) failed.")
@@ -238,7 +238,7 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f"✓ {image_path.name} {actual_w}×{actual_h} ({note}){kept} — "
+                f"OK: {image_path.name} {actual_w}×{actual_h} ({note}){kept}, "
                 f"{attribution.get('title', stem)}"
                 f" by {attribution.get('author', 'unknown')}"
                 f" ({attribution.get('license', 'no license')})"

@@ -30,7 +30,7 @@ jobs:
 
       # Opens (or updates) a PR only when autoupdate changed the config.
       # NOTE: PRs opened with the default GITHUB_TOKEN do not trigger other workflows, so
-      # Run Tests won't run on this PR automatically — re-run it manually, or swap in a PAT
+      # Run Tests won't run on this PR automatically: re-run it manually, or swap in a PAT
       # here to have it run on push.
       - name: Open pull request
         uses: peter-evans/create-pull-request@v8

@@ -44,17 +44,14 @@
             <p>{{ course.description|linebreaks }}</p>
             <c-image-credit :credit="course.thumbnail_credit" label="Thumbnail" />
         </c-card>
-        {% if can_edit %}{% if renewed_from or renewals %}
+        {% if can_edit and lineage_tree %}
         <c-card heading="Offerings">
-            {% if renewed_from %}<p class="meta">Renewed from <a href="{{ renewed_from.get_absolute_url }}">{{ renewed_from.display_name }}</a>.</p>{% endif %}
-            {% if renewals %}
-            <p class="meta">Renewed as:</p>
-            <ul class="roster-list">
-                {% for r in renewals %}<li><a href="{{ r.get_absolute_url }}">{{ r.display_name }}</a></li>{% endfor %}
+            <p class="meta">Every offering in this course's renewal history, earliest first.</p>
+            <ul class="lineage-tree lineage-tree-root">
+                {% include 'homework/_lineage_tree_node.html' with node=lineage_tree current=course %}
             </ul>
-            {% endif %}
         </c-card>
-        {% endif %}{% endif %}
+        {% endif %}
         {% if not is_course_staff and user not in course.students.all %}
         <form method="post" action="{% url 'homework:course_enroll' slug=course.slug %}">
             {% csrf_token %}
@@ -78,7 +75,7 @@
                     <div id="assignment-{{ row.assignment.pk }}" class="disclosure-content">
                         <div class="disclosure-content-inner">
                             <div class="disclosure-content-pad">
-                                <p class="meta"><a href="{{ row.assignment.get_absolute_url }}">Open assignment →</a></p>
+                                <p class="meta"><a href="{{ row.assignment.get_absolute_url }}">Open assignment</a></p>
                                 {% if row.problems %}
                                 <ul class="problem-scores">
                                     {% for p in row.problems %}
@@ -89,7 +86,7 @@
                                             {{ p.mean_percent|floatformat:0 }}%<span class="problem-score-detail">{{ p.passed }}/{{ num_students }}</span>
                                         </span>
                                         {% else %}
-                                        <span class="problem-score-value problem-score-empty">—</span>
+                                        <span class="problem-score-value problem-score-empty">-</span>
                                         {% endif %}
                                     </li>
                                     {% endfor %}

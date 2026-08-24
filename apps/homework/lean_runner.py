@@ -1,7 +1,7 @@
 """Run and grade Lean submissions: assemble the compilable document, execute Lean in the
 sandbox, and apply the two-layer anti-cheat policy (construct scan + axiom audit).
 
-Used by the run/submit views (``views/problems.py``) and shared with the live-LSP consumer —
+Used by the run/submit views (``views/problems.py``) and shared with the live-LSP consumer:
 ``assemble_lean_submission_source`` is deliberately kept in sync with the document assembly in
 ``consumers.py``.
 """
@@ -80,7 +80,7 @@ def parse_lean_feedback(
 
             lower = stripped.lower()
             if stripped.startswith("bwrap:"):
-                # Sandbox-wrapper failure, not Lean output — never a "message".
+                # Sandbox-wrapper failure, not Lean output: never a "message".
                 errors.append(line)
             elif lower.startswith("goal:"):
                 goals.append(stripped[len("goal:") :].strip())
@@ -165,10 +165,10 @@ def run_lean_process(code: str, extra: str = "") -> dict:
     """Write ``code`` (plus optional ``extra``, e.g. a grading stub) to a temp ``.lean`` file
     and run Lean on it, always cleaning the file up. Returns one of:
 
-    - ``{"returncode": int, "stdout": str, "stderr": str}`` — Lean ran
-    - ``{"timeout": True, "stdout": str, "stderr": str}`` — timed out (with partial output)
-    - ``{"missing": True}`` — the Lean executable could not be found
-    - ``{"sandbox_error": True, "stdout": str, "stderr": str}`` — the sandbox wrapper failed
+    - ``{"returncode": int, "stdout": str, "stderr": str}``: Lean ran
+    - ``{"timeout": True, "stdout": str, "stderr": str}``: timed out (with partial output)
+    - ``{"missing": True}``: the Lean executable could not be found
+    - ``{"sandbox_error": True, "stdout": str, "stderr": str}``: the sandbox wrapper failed
       to start, so Lean never ran (a server problem, not a grading result)
     """
     workdir = None
@@ -271,7 +271,7 @@ def grade_lean_submission(
     if result.get("sandbox_error"):
         msg = (
             "The server's Lean sandbox failed to start, so your submission could not be "
-            "graded. This is a server problem, not an issue with your proof — please tell "
+            "graded. This is a server problem, not an issue with your proof. Please tell "
             "your instructor."
         )
         if keep_internal:
@@ -289,7 +289,7 @@ def grade_lean_submission(
         return (Submission.STATUS_ERROR, msg)
 
     if result["returncode"] == 0:
-        # Layer 2: the proof compiled — now verify it doesn't lean on forbidden axioms.
+        # Layer 2: the proof compiled; now verify it doesn't lean on forbidden axioms.
         if problem.axiom_target:
             allowed_axioms = frozenset(
                 name.strip()
@@ -307,7 +307,7 @@ def grade_lean_submission(
                 if "sorryAx" in bad:
                     return (
                         Submission.STATUS_FAILED,
-                        "Your proof is incomplete — it relies on `sorry`.",
+                        "Your proof is incomplete: it relies on `sorry`.",
                     )
                 return (
                     Submission.STATUS_FAILED,

@@ -1,5 +1,5 @@
 /**
- * Course thumbnail picker: drag-and-drop / file upload OR a preset image — mutually exclusive,
+ * Course thumbnail picker: drag-and-drop / file upload OR a preset image, mutually exclusive,
  * with a live preview. Loaded with `defer`, so the DOM is ready when this runs.
  */
 (function () {

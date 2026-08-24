@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  # Everything in .pre-commit-config.yaml (ruff, black, mypy, hadolint, the asset scan) —
+  # Runs everything in .pre-commit-config.yaml (ruff, black, mypy, hadolint, the asset scan);
   # without this job the hooks are only enforced on machines that installed them.
   lint:
     name: Lint (pre-commit)
@@ -29,7 +29,7 @@ jobs:
           enable-cache: true
 
       # The mypy hook runs `uv run mypy` from the project venv (language: system) so the
-      # django-stubs plugin can import the settings + models — hence a full sync first.
+      # django-stubs plugin can import the settings + models, hence a full sync first.
       - name: Sync environment
         run: uv sync --frozen
 

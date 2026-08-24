@@ -476,3 +476,39 @@ class CourseDetailStatsAndMemberTests(TestCase):
         self.assertEqual(
             Course.objects.filter(renewed_from=self.m["course"]).count(), 0
         )
+
+
+class CourseDetailLineageTests(TestCase):
+    def setUp(self):
+        self.m = make_role_matrix()
+
+    def test_standalone_course_shows_no_offerings_card(self):
+        self.client.force_login(self.m["instructor"])
+        url = reverse("homework:course_detail", kwargs={"slug": "test-course"})
+        response = self.client.get(url)
+        self.assertIsNone(response.context["lineage_tree"])
+        self.assertNotContains(response, "Offerings")
+
+    def test_instructor_sees_the_full_lineage_tree(self):
+        renewed = Course.objects.create(
+            title="Test Course", slug="test-course-2", renewed_from=self.m["course"]
+        )
+        renewed.instructors.add(self.m["instructor"])
+        self.client.force_login(self.m["instructor"])
+        url = reverse("homework:course_detail", kwargs={"slug": "test-course"})
+        response = self.client.get(url)
+        tree = response.context["lineage_tree"]
+        self.assertEqual(tree["course"], self.m["course"])
+        self.assertEqual(tree["children"][0]["course"], renewed)
+        self.assertContains(response, "Offerings")
+        self.assertContains(response, renewed.display_name)
+
+    def test_student_does_not_see_lineage_tree_context(self):
+        Course.objects.create(
+            title="Test Course", slug="test-course-2", renewed_from=self.m["course"]
+        )
+        self.client.force_login(self.m["student"])
+        url = reverse("homework:course_detail", kwargs={"slug": "test-course"})
+        response = self.client.get(url)
+        self.assertNotIn("lineage_tree", response.context)
+        self.assertNotContains(response, "Offerings")

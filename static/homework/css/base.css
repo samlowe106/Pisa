@@ -321,7 +321,7 @@ header a:hover {
     margin-bottom: 1rem;
 }
 
-/* Only the field's own label — not the per-option labels inside a checkbox/radio group. */
+/* Only the field's own label, not the per-option labels inside a checkbox/radio group. */
 .field > label {
     display: block;
     font-weight: 600;
@@ -456,8 +456,8 @@ header a:hover {
 }
 
 /* Proof complete: tint the Goals section green. Dark-green text on a light-green wash keeps
-   strong luminance contrast, so it stays readable for red–green colorblind users — and the
-   🎉 in the message is a non-color cue as well. */
+   strong luminance contrast, so it stays readable for red–green colorblind users; the
+   differing message text ("No goals, proof complete!") is a non-color cue as well. */
 .lean-panel.goals-complete .lean-panel-title {
     color: #166534;
 }
@@ -620,7 +620,7 @@ header a:hover {
     padding: 0.05rem 0.5rem;
 }
 
-/* Statistics tab — grade-distribution histogram, one colour-coded bar per section. */
+/* Statistics tab: grade-distribution histogram, one colour-coded bar per section. */
 .grade-chart {
     align-items: flex-end;
     display: flex;
@@ -921,7 +921,7 @@ header a:hover {
     margin-left: auto;
 }
 
-/* Slide: animate the grid row 0fr→1fr (see source-file disclosure for the same technique). */
+/* Slide: animate the grid row 0fr to 1fr (see source-file disclosure for the same technique). */
 .disclosure-content {
     display: grid;
     grid-template-rows: 1fr;
@@ -1014,7 +1014,7 @@ header a:hover {
 /* Reserve the remove column at a constant width so the confirm-countdown label changing
    from "Remove" to "Are you sure? (3)" to "Yes, remove" never reflows the Course grade
    column (the table is width:100%, so a wider column would steal space from its siblings).
-   Sizing the body cell sets the whole column, so the empty header needs no rule — and this
+   Sizing the body cell sets the whole column, so the empty header needs no rule. This
    only applies when a remove column exists (can_edit), not to the TA/student grade table. */
 .students-table td.roster-remove {
     text-align: right;
@@ -1124,6 +1124,28 @@ header a:hover {
 
 .roster-list li:first-child {
     border-top: 0;
+}
+
+/* Course renewal lineage tree (templates/homework/_lineage_tree_node.html) */
+
+.lineage-tree {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.lineage-tree .lineage-tree {
+    border-left: 1px solid #e2e8f0;
+    margin-top: 0.35rem;
+    padding-left: 1rem;
+}
+
+.lineage-node {
+    padding: 0.15rem 0;
+}
+
+.lineage-current {
+    font-weight: 600;
 }
 
 .roster-remove button {
@@ -1428,8 +1450,8 @@ header a:hover {
 }
 
 /* Stack the grade and its placeholder in one grid cell: the column is always as tall as
-   the grade display (the taller of the two), so revealing/hiding grades — or a different
-   letter — never changes the card's height. We swap visibility, not display, so the
+   the grade display (the taller of the two), so revealing/hiding grades, or a different
+   letter, never changes the card's height. We swap visibility, not display, so the
    reserved space never collapses. */
 .course-card-grade > .grade-display,
 .course-card-grade > .grade-placeholder {

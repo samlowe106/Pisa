@@ -1,6 +1,6 @@
 /**
  * Roster CSV import: each roster field ("Upload CSV") reads a file client-side, pulls every
- * email out of it (any CSV layout — headers/columns don't matter), and merges them into the
+ * email out of it (any CSV layout: headers/columns don't matter), and merges them into the
  * field's text input (deduped, case-insensitive) so they can still be edited before saving.
  * Loaded with `defer`.
  */

@@ -14,15 +14,19 @@ services:
     restart: unless-stopped
     env_file: .env
     # Untrusted Lean runs inside a bubblewrap sandbox (LEAN_SANDBOX_WRAPPER, on by default),
-    # which needs unprivileged user namespaces — blocked by Docker's default seccomp profile —
-    # mount() inside them — blocked by Docker's default AppArmor profile ("bwrap: Failed to
-    # make / slave: Permission denied") — and a fresh procfs mount for the new pid namespace,
+    # which needs unprivileged user namespaces (blocked by Docker's default seccomp profile),
+    # mount() inside them (blocked by Docker's default AppArmor profile: "bwrap: Failed to
+    # make / slave: Permission denied"), and a fresh procfs mount for the new pid namespace,
     # which the kernel refuses while Docker masks /proc paths ("bwrap: Can't mount proc on
     # /newroot/proc"). All three grants are required; bubblewrap then isolates Lean (no
-    # network / read-only filesystem). The app process is trusted; tighter custom profiles are
-    # a future refinement (see TODO.md).
+    # network / read-only filesystem). The seccomp profile below (docker/seccomp/pisa.json)
+    # replaces Docker's default with one that still allows what bwrap needs but explicitly
+    # denies the syscalls a sandboxed Lean process has no legitimate reason to use (ptrace,
+    # bpf, kernel-module/keyring calls, …); it is not equivalent to Docker's own default-deny
+    # profile (see the file's own header). AppArmor stays unconfined: loading a tighter profile
+    # takes root on the host, so it stays unconfined for now (see TODO.md).
     security_opt:
-      - seccomp:unconfined
+      - seccomp=docker/seccomp/pisa.json
       - apparmor:unconfined
       - systempaths=unconfined
     environment:
@@ -31,11 +35,44 @@ services:
       LEAN_EXECUTABLE: /usr/local/bin/lean-direct
       LEAN_LSP_CMD: /usr/local/bin/lean-direct --server
     volumes:
-      - ./data:/app/data # SQLite database
+      - ./data:/app/data # SQLite database (unused once DATABASE_URL is set below)
       - ./media:/app/media # user uploads
     expose:
       - "8000"
     command: daphne -b 0.0.0.0 -p 8000 pisa.asgi:application
+    # Uncomment once running against Postgres/Redis (see the block below and TODO.md):
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   redis:
+    #     condition: service_healthy
+
+  # SQLite + the in-process cache/channel layer are plenty for a single class or department.
+  # Uncomment postgres/redis below, set DATABASE_URL/REDIS_URL in .env (see .env.example), and
+  # uncomment web's depends_on above once load actually calls for multiple worker processes.
+  # postgres:
+  #   image: postgres:16-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: pisa
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+  #     POSTGRES_DB: pisa
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U pisa"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
 
   caddy:
     image: caddy:2
@@ -56,3 +93,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  # postgres_data: # uncomment alongside the postgres service above

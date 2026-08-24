@@ -2,8 +2,8 @@
 
 Permutation-based p-values keep this assumption-free and light at the small sample sizes we
 deal with (no numpy/scipy). The **primitive** tests are deliberately shaped like their
-``scipy.stats`` counterparts — same leading arguments, and a result exposing ``.statistic`` and
-``.pvalue`` — so moving to scipy later is close to a drop-in: import the scipy function under
+``scipy.stats`` counterparts: same leading arguments, and a result exposing ``.statistic`` and
+``.pvalue``, so moving to scipy later is close to a drop-in: import the scipy function under
 the same name, or swap the body. Each notes its scipy analogue.
 
 The ``compare_*`` helpers and effect sizes are our own orchestration on top of the primitives.
@@ -60,7 +60,7 @@ def _welch_t(a, b):
 
 
 def ttest_ind(a, b, *, equal_var=False, n_resamples=DEFAULT_RESAMPLES, rng=None):
-    """Welch's t-test with a *permutation* p-value (studentised permutation — robust to
+    """Welch's t-test with a *permutation* p-value (studentised permutation: robust to
     unequal variance and non-normality at small n). Returns the Welch t and its two-sided
     permutation p-value.
 
@@ -136,7 +136,7 @@ def chi2_statistic(table):
 
 def chi2_contingency(table, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
     """Pearson χ² for a 2×c table with a permutation p-value (shuffles the row label of the
-    underlying individuals) — appropriate when expected cell counts are small.
+    underlying individuals), appropriate when expected cell counts are small.
 
     scipy: ``scipy.stats.chi2_contingency(table)`` (analytic).
     """
@@ -204,7 +204,7 @@ def cohens_d(a, b):
 
 
 def cliffs_delta(a, b):
-    """Cliff's δ = P(a > b) − P(a < b) — the nonparametric effect size (= rank-biserial r)."""
+    """Cliff's δ = P(a > b) − P(a < b): the nonparametric effect size (= rank-biserial r)."""
     a, b = list(a), list(b)
     if not a or not b:
         return float("nan")

@@ -52,7 +52,7 @@ repos:
     hooks:
       # mypy runs from the project venv (language: system) so the django-stubs plugin can
       # import pisa.settings + the models. SECRET_KEY is only needed to import settings; its
-      # value is irrelevant to type checking. pass_filenames: false → always check the whole
+      # value is irrelevant to type checking. pass_filenames: false means always check the whole
       # package, so a change in one module is re-checked against everything that imports it.
       - id: mypy
         name: mypy + django-stubs
@@ -62,6 +62,6 @@ repos:
         pass_filenames: false
       - id: scan-external-assets
         name: Unsafe external asset scan
-        entry: python scripts/scan_external_assets.py
+        entry: uv run python scripts/scan_external_assets.py
         language: system
         files: \.(html|htm|js)$

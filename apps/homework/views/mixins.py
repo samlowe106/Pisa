@@ -7,14 +7,14 @@ from ..models import Course
 
 
 class StaffRequiredMixin(UserPassesTestMixin):
-    """Restrict a view to site admins (Django staff) — e.g. creating courses."""
+    """Restrict a view to site admins (Django staff), e.g. creating courses."""
 
     def test_func(self):
         return bool(self.request.user.is_staff)
 
 
 class InstructorAnywhereMixin(UserPassesTestMixin):
-    """Allow site admins and anyone who instructs at least one course — used for the shared
+    """Allow site admins and anyone who instructs at least one course; used for the shared
     Lean source-file library."""
 
     def test_func(self):
@@ -41,8 +41,8 @@ class FormsetMixin:
     """Manage one related inline formset alongside the main form on a Create/Update view.
 
     Set ``formset_class`` and ``formset_context_name``. The formset is built bound to POST
-    data or to the object instance, exposed in the template context, and — when both it and
-    the main form validate — saved against the just-saved object. Views that need to stamp
+    data or to the object instance, exposed in the template context, and saved against the
+    just-saved object when both it and the main form validate. Views that need to stamp
     fields on the new instance (e.g. ``form.instance.created_by``) set them in their own
     ``form_valid`` before calling ``super().form_valid(form)``.
     """

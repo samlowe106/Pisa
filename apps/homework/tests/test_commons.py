@@ -18,7 +18,7 @@ from PIL import Image
 from apps.homework import commons
 from apps.homework.commons import ImageInfo
 
-# The extmetadata block from the real API response for File:Spirale_Ulam_150.jpg — public domain,
+# The extmetadata block from the real API response for File:Spirale_Ulam_150.jpg: public domain,
 # plain-text (unlinked) author, no license URL.
 SPIRALE = ImageInfo(
     title="File:Spirale Ulam 150.jpg",
@@ -310,7 +310,7 @@ class FetchCommandTests(SimpleTestCase):
                 commons.build_attribution(SPIRALE),
             )
             mocks["download_scaled"].assert_not_called()
-            # The preset IS the original here — no duplicate copy in originals/.
+            # The preset IS the original here: no duplicate copy in originals/.
             self.assertFalse((Path(tmp) / "originals").exists())
 
     def test_downscale_path_uses_download_scaled_with_target_width(self):

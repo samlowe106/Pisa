@@ -4,13 +4,13 @@ Given a Commons ``File:`` reference (a page URL, a ``File:`` title, or a bare fi
 MediaWiki API for the original dimensions + attribution metadata, size the image to a desired
 resolution (Commons serves only a fixed set of thumbnail widths and rounds a request *up* to the
 next one, so we fetch the nearest rendition at/above the target and downscale it locally to the
-exact width with Pillow — see ``best_thumb_width`` / ``download_scaled``), and build the
+exact width with Pillow, see ``best_thumb_width`` / ``download_scaled``), and build the
 ``{title, author, author_url, license, license_url, source_url}`` sidecar that
 ``thumbnails._thumbnail_preset_attribution`` reads.
 
 Network access is confined to ``fetch_image_info`` / ``pick_download_url`` / ``download`` /
 ``download_scaled``; everything else is pure and unit-tested. Pillow (already a dependency) does the
-resample — otherwise stdlib only.
+resample; otherwise stdlib only.
 """
 
 import json
@@ -77,7 +77,7 @@ def title_from_filename(file_title: str) -> str:
 
 
 def extension_for(url: str, mime: str = "") -> str:
-    """File extension (with dot) for a download URL — from the URL path, MIME as a fallback.
+    """File extension (with dot) for a download URL: from the URL path, MIME as a fallback.
 
     Commons thumbnail URLs end in the rendered filename, e.g. ``.../800px-Foo.jpg`` (raster) or
     ``.../800px-Bar.svg.png`` (SVGs rasterize to PNG), so the URL suffix is authoritative.
@@ -104,7 +104,7 @@ def best_thumb_width(
     """Pick the thumbnail width in ``[1, orig_w]`` closest to the desired resolution.
 
     Because we resample locally after fetching, any width up to the original is achievable, height
-    locked to the aspect ratio ``r = orig_h / orig_w`` — so the "resolutions on offer" are the
+    locked to the aspect ratio ``r = orig_h / orig_w``, so the "resolutions on offer" are the
     family ``{(w, round(w * r)) : 1 <= w <= orig_w}``. We return the ``w`` minimising the distance
     from ``(w, round(w * r))`` to the target, and never upscale.
 
@@ -113,7 +113,7 @@ def best_thumb_width(
     * 2-D target: minimise L1 or L2 distance to ``(target_w, target_h)`` over the family. We
       evaluate an integer candidate set around the analytic optima (L2 has a closed form; L1's
       optimum sits at a kink ``w = target_w`` or ``w = target_h / r``) plus the endpoints, and take
-      the argmin — one code path for both metrics.
+      the argmin: one code path for both metrics.
     """
     if orig_w <= 0 or orig_h <= 0:
         raise ValueError("original dimensions must be positive")
@@ -210,7 +210,7 @@ def _clean_object_name(value: str) -> str:
     """Strip HTML and the QuickStatements noise Commons embeds in some ``ObjectName`` values.
 
     Artworks often carry every translation of their title as structured-data markup, e.g.
-    ``Death of Archimedes label QS:Len,"Death of Archimedes" label QS:Lde,"Der Tod..."`` —
+    ``Death of Archimedes label QS:Len,"Death of Archimedes" label QS:Lde,"Der Tod..."``:
     everything from the first ``label QS:``/``title QS:`` on is machine data, not the title.
     A leading ``<language>:`` prefix (``Italian: Scuola di Atene``) is dropped the same way.
     """
@@ -315,7 +315,7 @@ def pick_download_url(info: ImageInfo, target_width: int) -> tuple[str, bool]:
     """URL to download for ~``target_width`` px, and whether it's the original file.
 
     Commons serves only a fixed set of thumbnail widths and rounds a request *up* to the next
-    allowed one, so this returns that rendition (>= target_width, usually a bit larger — the caller
+    allowed one, so this returns that rendition (>= target_width, usually a bit larger; the caller
     downscales it to the exact target with ``download_scaled``). At or above the original width we
     return the original untouched (never upscale); those go through ``download`` verbatim, which
     also keeps vector SVG originals intact (Pillow can't open SVG).
@@ -345,7 +345,7 @@ def download_scaled(url: str, target_width: int, dest: Path) -> tuple[int, int]:
     Commons' served thumbnail is usually a little larger than requested (it rounds up to an allowed
     bucket), so we resample down locally with Pillow (Lanczos). If it already fits within
     ``target_width`` the bytes are written verbatim (no re-encode). Returns the final ``(w, h)``.
-    Only raster thumbnails reach here — original/SVG downloads go through ``download``.
+    Only raster thumbnails reach here; original/SVG downloads go through ``download``.
     """
     raw = _http_get(url)
     with Image.open(BytesIO(raw)) as image:

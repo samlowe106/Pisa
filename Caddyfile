@@ -13,6 +13,6 @@
 		file_server
 	}
 
-	# Everything else — pages, static assets (via WhiteNoise), and WebSockets — goes to the app.
+	# Everything else (pages, static assets via WhiteNoise, and WebSockets) goes to the app.
 	reverse_proxy web:8000
 }

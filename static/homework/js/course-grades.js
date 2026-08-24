@@ -1,5 +1,5 @@
 /**
- * Course page — student grades table (staff only).
+ * Course page: student grades table (staff only).
  *
  * Grades are hidden by default. Each row's grade cell is a toggle; a "Show all grades"
  * button at the top reveals/hides every row at once and keeps its own label in sync. The

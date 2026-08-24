@@ -21,7 +21,7 @@ def _lean_available():
 
 
 def _bwrap_can_sandbox():
-    """Whether bubblewrap can actually *create* a sandbox here — not just whether the binary is
+    """Whether bubblewrap can actually *create* a sandbox here, not just whether the binary is
     installed. Inside a container without the right capabilities bwrap is present but fails at
     ``mount`` ("Failed to make / slave"), so a binary-only check would let the Layer 2 tests run
     and fail. We probe with the same namespace/bind setup the real wrapper uses."""
@@ -45,6 +45,38 @@ requires_lean = unittest.skipUnless(_lean_available(), "Lean executable not avai
 # Layer 2 sandbox-isolation tests need a bubblewrap that can really build a sandbox here.
 requires_bwrap = unittest.skipUnless(
     _bwrap_can_sandbox(), "bubblewrap cannot create a sandbox in this environment"
+)
+
+
+def _seccomp_denies_ptrace():
+    """Whether *this* process is already confined by a seccomp filter that denies ptrace, i.e.
+    running inside a container with docker/seccomp/pisa.json applied via security_opt, not a
+    bare host or dev container. ptrace(PTRACE_TRACEME) always succeeds on its own (it has no
+    tracer to deny), so a plain permission check can't tell us this; only a seccomp ERRNO action
+    makes the syscall itself fail, which is exactly what we're probing for."""
+    try:
+        probe = subprocess.run(
+            [
+                "python3",
+                "-c",
+                "import ctypes, sys; "
+                "libc = ctypes.CDLL(None, use_errno=True); "
+                "rc = libc.ptrace(0, 0, 0, 0); "
+                "sys.exit(0 if rc == -1 and ctypes.get_errno() == 1 else 1)",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        return probe.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+# The ptrace-denial test only means something inside a container carrying the hardened
+# seccomp profile (docker/seccomp/pisa.json); elsewhere ptrace is expected to succeed.
+requires_hardened_seccomp = unittest.skipUnless(
+    _seccomp_denies_ptrace(),
+    "not running under the hardened seccomp profile (docker/seccomp/pisa.json)",
 )
 
 

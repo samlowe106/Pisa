@@ -2,7 +2,7 @@
 summaries, grade distributions, and the stats-tab section comparison.
 
 Everything here is read-only aggregation over ``Submission``/``Problem`` rows. The scoring policy
-("latest submission wins" vs "best of") is resolved in exactly one place — ``_passed_pairs`` —
+("latest submission wins" vs "best of") is resolved in exactly one place, ``_passed_pairs``,
 and every summary builds on it.
 """
 
@@ -45,7 +45,7 @@ def _passed_pairs(submission_rows, scoring_method):
 
 
 class EarnedPoints(NamedTuple):
-    """Resolved scores for a set of students on a set of problems — see ``earned_points``."""
+    """Resolved scores for a set of students on a set of problems, see ``earned_points``."""
 
     rows: list  # raw (user_id, problem_id, status, created_at) submission rows
     passed_pairs: set  # {(user_id, problem_id)} passed under the course scoring policy
@@ -89,7 +89,7 @@ def earned_by_assignment(passed_pairs, points_by_problem, assignment_of):
 
 
 def submitters_by_assignment(rows, assignment_of):
-    """``{assignment_id: {user_id, ...}}`` — distinct users with any submission per assignment."""
+    """``{assignment_id: {user_id, ...}}``: distinct users with any submission per assignment."""
     submitters: dict[int, set] = defaultdict(set)
     for user_id, problem_id, _status, _created in rows:
         submitters[assignment_of[problem_id]].add(user_id)
@@ -254,7 +254,7 @@ def grade_distribution_chart(course):
 def section_score_data(course):
     """Per-section samples for the hypothesis tests: every enrolled student's overall course
     percent, and each *submitter's* percent on each assignment (keyed by assignment slug). Also
-    returns a slug → title map for display."""
+    returns a slug-to-title map for display."""
     enrolled_ids = list(course.students.values_list("id", flat=True))
     problem_rows = list(
         Problem.objects.filter(
@@ -281,7 +281,7 @@ def section_score_data(course):
     )
     submitters = submitters_by_assignment(ep.rows, problem_assignment)
 
-    # Overall: every enrolled student (non-submitters count as 0 — it's their course grade).
+    # Overall: every enrolled student (non-submitters count as 0, it's their course grade).
     overall = (
         [overall_earned.get(uid, 0) / total * 100 for uid in enrolled_ids]
         if total
@@ -303,8 +303,8 @@ def section_score_data(course):
 
 
 def compare_two_sections(course_a, course_b, counts_a, counts_b):
-    """Full comparison of two sections — overall course grades, the letter-grade mix, and each
-    shared assignment (matched by slug) — with Benjamini–Hochberg-corrected per-assignment
+    """Full comparison of two sections: overall course grades, the letter-grade mix, and each
+    shared assignment (matched by slug), with Benjamini–Hochberg-corrected per-assignment
     p-values. ``counts_*`` are A–F count vectors. Observational, not causal."""
     data_a = section_score_data(course_a)
     data_b = section_score_data(course_b)

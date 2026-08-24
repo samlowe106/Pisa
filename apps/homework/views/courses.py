@@ -21,7 +21,7 @@ from ..forms import (
     CourseRenewForm,
 )
 from ..models import Course, Problem
-from ..ops import renew_course
+from ..ops import course_lineage_tree, renew_course
 from ..reporting import (
     _GRADE_LETTERS,
     compare_two_sections,
@@ -41,8 +41,8 @@ ROLE_RELATIONS = {"instructor": "instructors", "ta": "tas", "student": "students
 
 
 class CourseListView(LoginRequiredMixin, TemplateView):
-    """The app's landing page: a card view of the viewer's courses — staff and students
-    alike — split into active and previous."""
+    """The app's landing page: a card view of the viewer's courses, staff and students
+    alike, split into active and previous."""
 
     template_name = "homework/course_list.html"
 
@@ -143,11 +143,10 @@ class CourseDetailView(LoginRequiredMixin, DetailView):
         context["is_course_staff"] = is_course_staff
         context["can_edit"] = course.is_instructor(user)
         context["can_manage_instructors"] = course.can_manage_instructors(user)
-        # Offering lineage (instructors + admins): the offering this was renewed from and the
-        # offerings renewed from it.
+        # Offering lineage (instructors + admins): the full renewal family tree, or None for a
+        # standalone course.
         if context["can_edit"]:
-            context["renewed_from"] = course.renewed_from
-            context["renewals"] = list(course.renewals.order_by("-created_at"))
+            context["lineage_tree"] = course_lineage_tree(course)
         context["instructors"] = [
             {"id": u.id, "name": display_name(u)} for u in course.instructors.all()
         ]

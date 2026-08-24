@@ -2,7 +2,7 @@
  * Generic disclosure widgets.
  *
  * A `.disclosure-summary` button toggles the `collapsed` class on its `.disclosure` parent;
- * the `.disclosure-content` slides open/closed via CSS (grid-template-rows 0fr→1fr). No
+ * the `.disclosure-content` slides open/closed via CSS (grid-template-rows 0fr to 1fr). No
  * dependencies. Loaded with `defer`, so the DOM is ready when this runs.
  */
 (function () {

@@ -1,22 +1,23 @@
 """Tests for the untrusted-Lean sandbox (apps/homework/sandbox.py).
 
-- Mechanics (Layer 1) use stand-in commands — no Lean needed.
-- Isolation (Layer 2) uses the default bubblewrap wrapper with stand-ins — `@requires_bwrap`.
+- Mechanics (Layer 1) use stand-in commands, no Lean needed.
+- Isolation (Layer 2) uses the default bubblewrap wrapper with stand-ins, `@requires_bwrap`.
 - One real-Lean smoke test confirms a proof still compiles inside the full sandbox.
 """
 
 import os
 import subprocess
 import tempfile
+import time
 
 from django.test import SimpleTestCase, override_settings
 
 from apps.homework import sandbox
 from apps.homework.lean_runner import run_lean_process
 
-from .utils import requires_bwrap, requires_lean
+from .utils import requires_bwrap, requires_hardened_seccomp, requires_lean
 
-# The production default wrapper (bubblewrap) — used directly so the tests pin real behaviour.
+# The production default wrapper (bubblewrap), used directly so the tests pin real behaviour.
 BWRAP = [
     "bwrap",
     "--unshare-all",
@@ -159,8 +160,81 @@ class SandboxIsolationTests(SimpleTestCase):
                 os.remove(marker)
 
 
+@requires_lean
+@requires_bwrap
+@override_settings(LEAN_SANDBOX_WRAPPER=BWRAP, LEAN_TIMEOUT=60)
+class SandboxAdversarialLeanEscapeTests(SimpleTestCase):
+    """Real, hostile Lean source (not a Python stand-in) run through the full default sandbox
+    (bubblewrap + env-strip + rlimits), calling ``run_lean_process`` directly the same way
+    ``SandboxAdversarialLeanTests`` below does: bypassing the text blacklist (``lean_policy``
+    already rejects ``IO.Process``/``IO.FS`` in real submissions) to exercise the OS sandbox as
+    the backstop for a submission that evaded it. Nothing here can do real damage: writes land
+    outside the sandbox's one writable directory and are refused, network calls have no
+    namespace to reach out through, and ptrace is either denied by seccomp or a no-op self-trace.
+    """
+
+    def test_malicious_lean_source_cannot_write_outside_its_workdir(self):
+        marker = "/pisa_lean_escape_marker"
+
+        def _cleanup():
+            if os.path.exists(marker):
+                os.remove(marker)
+
+        self.addCleanup(_cleanup)
+        program = f"""
+#eval do
+  try
+    IO.FS.writeFile "{marker}" "if you can read this, the sandbox failed"
+    IO.println "PISA_ESCAPE: WROTE"
+  catch e =>
+    IO.println s!"PISA_ESCAPE: BLOCKED {{e}}"
+"""
+        result = run_lean_process(program)
+        self.assertIn("PISA_ESCAPE: BLOCKED", result["stdout"])
+        self.assertNotIn("WROTE", result["stdout"])
+        self.assertFalse(os.path.exists(marker))  # nothing escaped to the host
+
+    def test_malicious_lean_source_cannot_reach_the_network(self):
+        program = r"""
+#eval do
+  try
+    let r <- IO.Process.output {
+      cmd := "python3",
+      args := #["-c", "import socket; s=socket.socket(); s.settimeout(3); s.connect((\"1.1.1.1\",53)); print(\"PISA_ESCAPE_CONNECTED\")"]
+    }
+    IO.println s!"PISA_ESCAPE_NET: stdout=[{r.stdout}] exit={r.exitCode}"
+  catch e =>
+    IO.println s!"PISA_ESCAPE: SPAWN_FAILED {e}"
+"""
+        result = run_lean_process(program)
+        self.assertNotIn("PISA_ESCAPE_CONNECTED", result["stdout"])
+
+    @requires_hardened_seccomp
+    def test_malicious_lean_source_cannot_ptrace_under_the_hardened_seccomp_profile(
+        self,
+    ):
+        # Only meaningful inside a container carrying docker/seccomp/pisa.json (see
+        # requires_hardened_seccomp): ptrace(PTRACE_TRACEME) always succeeds on its own account,
+        # so it's bubblewrap's namespace isolation, not Docker's seccomp filter, that's silent
+        # everywhere else. This is the one adversarial check that regresses without the seccomp
+        # profile: run it before/after docker-compose's seccomp change to see the flip.
+        program = r"""
+#eval do
+  try
+    let r <- IO.Process.output {
+      cmd := "python3",
+      args := #["-c", "import ctypes; libc=ctypes.CDLL(None,use_errno=True); rc=libc.ptrace(0,0,0,0); print(\"PISA_ESCAPE_PTRACE_RC\", rc, \"ERRNO\", ctypes.get_errno())"]
+    }
+    IO.println s!"PISA_ESCAPE_PTRACE: {r.stdout}"
+  catch e =>
+    IO.println s!"PISA_ESCAPE: SPAWN_FAILED {e}"
+"""
+        result = run_lean_process(program)
+        self.assertIn("PISA_ESCAPE_PTRACE_RC -1 ERRNO 1", result["stdout"])
+
+
 class SandboxResourceLimitTests(SimpleTestCase):
-    """Layer 1 POSIX rlimits — the guard against a submission eating memory / disk / PIDs.
+    """Layer 1 POSIX rlimits: the guard against a submission eating memory / disk / PIDs.
 
     The applied-limits test reads the child's *own* ``getrlimit`` so it's deterministic (no
     dependence on allocator behaviour); one behavioural test proves a file-size cap actually
@@ -197,7 +271,7 @@ class SandboxResourceLimitTests(SimpleTestCase):
 
     @override_settings(LEAN_SANDBOX_FSIZE_MB=1)
     def test_fsize_limit_kills_a_runaway_writer(self):
-        # Writing well past the 1 MB cap trips RLIMIT_FSIZE (SIGXFSZ → negative return code).
+        # Writing well past the 1 MB cap trips RLIMIT_FSIZE (SIGXFSZ becomes negative return code).
         with tempfile.TemporaryDirectory() as d:
             target = os.path.join(d, "big.bin")
             result = subprocess.run(
@@ -252,3 +326,76 @@ class SandboxAdversarialLeanTests(SimpleTestCase):
         combined = (result.get("stdout") or "") + (result.get("stderr") or "")
         self.assertNotIn("SENTINEL_LEAK", combined)  # secret never reached Lean
         self.assertIn("VISIBLE_OK", combined)  # non-secret env still passed through
+
+    def test_malicious_lean_process_bomb_is_killed_as_a_unit_on_timeout(self):
+        # "Fork bomb"-shaped Lean: spawn children forever without ever waiting on one. The
+        # wall-clock timeout + process-group kill (sandbox.kill_process_group) is the backstop
+        # here, not a process-count rlimit: RLIMIT_NPROC counts against the *host* user's total
+        # process count, not just this sandbox, so an absolute cap would be flaky on a machine
+        # that already runs hundreds of processes under the same uid.
+        marker = f"{12000 + os.getpid() % 3000}.{os.getpid() % 1000:03d}"
+        program = f"""
+partial def loop (n : Nat) : IO Unit := do
+  if n == 0 then
+    pure ()
+  else
+    discard <| IO.Process.spawn {{ cmd := "sleep", args := #["{marker}"] }}
+    loop (n - 1)
+
+#eval loop 100000
+"""
+        with override_settings(LEAN_TIMEOUT=5):
+            result = run_lean_process(program)
+        self.assertTrue(result.get("timeout"))
+        time.sleep(1)  # let the kernel finish reaping the killed process group
+        # A /proc scan rather than `pgrep`: the runtime image is minimal (no procps), and this
+        # check matters most exactly there, not just on a dev host that happens to have it.
+        leaked = []
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            try:
+                with open(f"/proc/{pid}/cmdline", "rb") as f:
+                    cmdline = f.read().replace(b"\x00", b" ").decode(errors="replace")
+            except OSError:
+                continue  # the process exited between listdir() and open()
+            if marker in cmdline:
+                leaked.append(cmdline)
+        self.assertEqual(leaked, [], f"leaked processes after kill: {leaked!r}")
+
+    @override_settings(LEAN_SANDBOX_MEMORY_MB=256)
+    def test_malicious_lean_memory_bomb_is_contained_by_the_memory_cap(self):
+        # A multi-gigabyte allocation, entirely in the `lean` process's own memory (no
+        # subprocess): RLIMIT_AS crashes it well short of the cap, never touching the host.
+        # LEAN_SANDBOX_MEMORY_MB is off by default (workload-dependent, see pisa/settings.py);
+        # this proves the knob holds once an operator turns it on.
+        program = r"""
+#eval do
+  let a := Array.mkArray 2000000000 (0 : UInt8)
+  IO.println s!"PISA_ESCAPE: ALLOCATED {a.size}"
+"""
+        with override_settings(LEAN_TIMEOUT=30):
+            result = run_lean_process(program)
+        self.assertNotEqual(result.get("returncode"), 0)
+        self.assertNotIn("ALLOCATED", result.get("stdout") or "")
+
+    @override_settings(LEAN_SANDBOX_FSIZE_MB=8)
+    def test_malicious_lean_decompression_bomb_is_contained_by_the_filesize_cap(self):
+        # "Upload a zip bomb, ask the sandbox to unzip it": a small, highly-compressible blob
+        # inflated to gigabytes and written to disk (inside the per-run workdir, cleaned up by
+        # run_lean_process regardless of outcome). RLIMIT_FSIZE catches the write mid-flight,
+        # well short of filling the disk.
+        program = r"""
+#eval do
+  try
+    let r <- IO.Process.output {
+      cmd := "python3",
+      args := #["-c", "import zlib; blob = zlib.compress(b'0' * (3 * 1024**3)); open('bomb.out','wb').write(zlib.decompress(blob))"]
+    }
+    IO.println s!"PISA_ESCAPE_BOMB: rc={r.exitCode} stderr=[{r.stderr}]"
+  catch e =>
+    IO.println s!"PISA_ESCAPE: SPAWN_FAILED {e}"
+"""
+        with override_settings(LEAN_TIMEOUT=30):
+            result = run_lean_process(program)
+        self.assertIn("File too large", result.get("stdout") or "")

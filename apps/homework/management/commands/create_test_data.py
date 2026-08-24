@@ -2,7 +2,7 @@
 
 Creates users across every role, several courses (active and inactive, with varied scoring
 policies, grade bands, and thumbnails), published and draft assignments, problems, Lean source
-files, and graded submissions — enough to exercise the dashboards, rosters, grade cards, the
+files, and graded submissions: enough to exercise the dashboards, rosters, grade cards, the
 courses search, the active/previous split, and the live Lean editor. Idempotent: re-running
 tops up anything missing rather than duplicating.
 """

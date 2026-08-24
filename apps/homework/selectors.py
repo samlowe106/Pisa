@@ -36,7 +36,7 @@ def accessible_assignments(user):
 
 
 def accessible_problems(user):
-    """Problems a user may view — mirrors ``accessible_assignments`` one level down."""
+    """Problems a user may view, mirroring ``accessible_assignments`` one level down."""
     if user.is_staff:
         return Problem.objects.all()
     return Problem.objects.filter(

@@ -7,7 +7,7 @@ on:
     branches: [main]
   schedule:
     # Weekly (Mon 06:00 UTC). Dependency CVEs are disclosed over time, so re-scan unchanged
-    # code on a cadence — not only when something is pushed.
+    # code on a cadence, not only when something is pushed.
     - cron: "0 6 * * 1"
 
 # Cancel superseded in-progress runs for the same branch / PR.
@@ -92,10 +92,10 @@ jobs:
           # Only write the cache from main (see tests.yml).
           cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max' || '' }}
 
-      # pip-audit (above) covers Python packages; this covers the OS layer — the Debian
+      # pip-audit (above) covers Python packages; this covers the OS layer: the Debian
       # packages in python:3.14-slim plus everything the Dockerfile apt-installs.
       # `ignore-unfixed` keeps the gate actionable: an advisory Debian hasn't fixed yet can't
-      # be remediated by rebuilding, so it doesn't fail the job — but the moment a fix ships,
+      # be remediated by rebuilding, so it doesn't fail the job, but the moment a fix ships,
       # the job fails until the base image is re-pulled and rebuilt. All findings (fixed or
       # not) still land in the SARIF for the Security tab.
       - name: Trivy scan (OS packages, CRITICAL/HIGH)

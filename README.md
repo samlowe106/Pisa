@@ -1,4 +1,4 @@
-# 📝 Pisa
+# Pisa
 
 Pisa is a [Django](https://www.djangoproject.com/) website for teachers to design and assign programming and proof assignments in [Lean4](https://lean-lang.org/), Microsoft's open-source proof assistant.
 
@@ -45,9 +45,13 @@ You need a server with Docker, ports **80** and **443** open, and a domain whose
 
    Optionally set `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD` to create an admin on first boot.
 
-2. **Launch.**
+2. **Launch.** The app container runs as a non-root user (uid/gid 1000), so `./data` and
+   `./media` need to exist and be owned by that uid *before* the first `up`, or Docker creates
+   them as root on first mount and the container can't write to them:
 
    ```bash
+   mkdir -p data media
+   sudo chown -R 1000:1000 data media  # skip sudo if you're already uid 1000
    docker compose -f docker-compose.prod.yml up -d --build
    ```
 
@@ -79,3 +83,7 @@ curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh 
 source ~/.elan/env
 lean --version
 ```
+
+## License
+
+AGPL-3.0-or-later. See [LICENSE](LICENSE).

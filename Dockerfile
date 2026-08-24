@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# --- base: what every stage shares — the interpreter and the *runtime* system deps only.
+# --- base: what every stage shares, the interpreter and the *runtime* system deps only.
 # Build tooling (compilers, curl, git) lives in the build stage below and never reaches the
 # runtime image.
 FROM python:3.14-slim AS base
@@ -14,7 +14,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PYTHON_PREFERENCE=only-system \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    PATH="/opt/venv/bin:/root/.elan/bin:/root/.local/bin:${PATH}"
+    ELAN_HOME=/opt/elan \
+    PATH="/opt/venv/bin:/opt/elan/bin:${PATH}"
 
 # Runtime system packages: bubblewrap for the Lean sandbox, ca-certificates so manage.py
 # fetch_commons_thumbnail can talk HTTPS. BuildKit cache mounts keep the apt archives warm
@@ -26,13 +27,21 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ca-certificates \
         bubblewrap
 
+# The runtime stage drops root for this user. bubblewrap itself doesn't need root: it builds
+# its sandbox from unprivileged user namespaces, granted through security_opt in the compose
+# files, not container-root. Fixed uid/gid 1000, the first free id on Debian, so a self-hoster's
+# own default host account (uid 1000 on most single-user Linux installs) already owns the
+# bind-mounted ./data and ./media without a manual chown; see README Self-hosting.
+RUN groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin app
+
 
 # --- build: heavy, rarely-changing work (build tools, uv, Lean toolchain, deps). ---
 # Everything expensive lives here so the GitHub Actions layer cache can reuse it across
-# runs; the runtime stage copies out only the artifacts (/opt/venv, /root/.elan).
+# runs; the runtime stage copies out only the artifacts (/opt/venv, /opt/elan).
 FROM base AS build
 
-# Fail piped RUNs (curl | sh below) when the *left* side fails — without pipefail a failed
+# Fail piped RUNs (curl | sh below) when the *left* side fails: without pipefail a failed
 # download feeds `sh` empty input, which exits 0 and silently skips the install.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -50,8 +59,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # elan only *records* the default toolchain; `lean --version` forces the actual toolchain
 # download so Lean is baked into this layer (otherwise `lean --server` would download
 # hundreds of MB on first use in every container, breaking live feedback).
-# Pisa only elaborates (`lean file.lean`, `lean --server`) — it never links native
-# executables — so the toolchain's native-compilation half (~500 MB of static *.a libs,
+# Pisa only elaborates (`lean file.lean`, `lean --server`), it never links native
+# executables, so the toolchain's native-compilation half (~500 MB of static *.a libs,
 # LLVM/clang, leanc) is deleted in the same layer to keep it out of the image. Trimming
 # must happen here: removing files in a later layer would not shrink the image.
 RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
@@ -63,8 +72,8 @@ RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init
         "$TOOLCHAIN"/bin/llvm* "$TOOLCHAIN"/bin/clang* "$TOOLCHAIN"/bin/ld.lld* \
         "$TOOLCHAIN"/bin/leanc
 
-# uv (Python package manager), pinned by copying the binary from its official image —
-# reproducible builds, unlike `curl | sh` of whatever is latest. Placed *after* the Lean
+# uv (Python package manager), pinned by copying the binary from its official image,
+# for reproducible builds, unlike `curl | sh` of whatever is latest. Placed *after* the Lean
 # layer so bumping the uv version doesn't invalidate the expensive toolchain download.
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 
@@ -84,15 +93,15 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project
 
 
-# --- runtime (default target): lean production image — no compilers, no build tooling ---
+# --- runtime (default target): lean production image, no compilers, no build tooling ---
 FROM base AS runtime
 
-COPY --from=build /opt/venv /opt/venv
-COPY --from=build /root/.elan /root/.elan
+COPY --from=build --chown=app:app /opt/venv /opt/venv
+COPY --from=build --chown=app:app /opt/elan /opt/elan
 
 # Bypass the elan shim at runtime: inside the bubblewrap sandbox (read-only filesystem, no
 # network) the shim re-resolves the `stable` channel on every `lean` invocation and prints
-# "warning: failed to query latest release" on stderr — which the editor then shows in its
+# "warning: failed to query latest release" on stderr, which the editor then shows in its
 # Messages panel on every run (ELAN_OFFLINE doesn't prevent it there). `elan which` resolves
 # the shim to the actual toolchain binary once, at build time, when the network is up.
 RUN ln -s "$(elan which lean)" /usr/local/bin/lean-direct
@@ -101,9 +110,11 @@ ENV ELAN_OFFLINE=1 \
     LEAN_LSP_CMD="/usr/local/bin/lean-direct --server"
 
 WORKDIR /app
-COPY . /app
+RUN chown app:app /app
+COPY --chown=app:app . /app
 RUN chmod +x /app/scripts/entrypoint.sh
 
+USER app
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 # Production default: serve over ASGI (WebSockets + HTTP) with daphne. The dev compose
 # overrides this with `runserver` for autoreload.
@@ -113,6 +124,9 @@ CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "pisa.asgi:application"]
 # --- test: runtime + dev tooling (coverage). Built by CI (--target test). ---
 FROM runtime AS test
 
-COPY --from=build-dev /opt/venv /opt/venv
+# runtime already dropped to USER app; only root can write into the /opt/venv COPY destination.
+USER root
+COPY --from=build-dev --chown=app:app /opt/venv /opt/venv
+USER app
 # Default command runs the suite under coverage; CI overrides to also emit reports.
 CMD ["coverage", "run", "manage.py", "test", "--verbosity=2"]

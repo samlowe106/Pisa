@@ -66,7 +66,7 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    # HSTS is opt-in (it's sticky — a wrong value can lock a domain out of HTTP). Set
+    # HSTS is opt-in (it's sticky: a wrong value can lock a domain out of HTTP). Set
     # SECURE_HSTS_SECONDS once you're confident HTTPS is permanent.
     SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
@@ -92,8 +92,31 @@ INSTALLED_APPS = [
 
 ASGI_APPLICATION = "pisa.asgi.application"
 
-# In-memory channel layer for development. Replace with Redis in production.
-CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+# In-memory channel layer and cache by default: correct for a single ASGI process (fine for a
+# class or department). Set REDIS_URL (e.g. redis://host:6379/0) to run both the channel layer
+# and the per-user Lean-instance cap (see consumers.py) against real Redis once load calls for
+# multiple workers (see TODO.md); one instance backs both, under different key namespaces.
+REDIS_URL = os.environ.get("REDIS_URL", "").strip()
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+# How long a claimed Lean-instance slot (consumers.py) survives without a heartbeat refresh.
+# Bounds how long a crashed worker's holder can leak the "busy" state before it self-clears.
+LEAN_CAP_TTL = int(os.environ.get("LEAN_CAP_TTL", "45"))
 
 # Command used to spawn the Lean LSP. Can be overridden via env var.
 LEAN_LSP_CMD = os.environ.get("LEAN_LSP_CMD", "lean --server").split()
@@ -118,7 +141,7 @@ MIDDLEWARE = [
 # (e.g. the polyfill.io supply-chain attack) is blocked at runtime.
 #
 # No 'unsafe-inline': all JavaScript is in external modules under static/homework/js/ and all
-# styling is in external CSS — there are no inline <script> blocks, on*= event handlers, or
+# styling is in external CSS: there are no inline <script> blocks, on*= event handlers, or
 # style="" attributes in the templates. So an injected inline <script>/<style> is refused by the
 # browser, which is the main XSS protection CSP provides. Keep it that way: new behaviour goes in
 # a static .js module (read server data from data-* attributes), not an inline <script>; dynamic
@@ -179,12 +202,21 @@ WSGI_APPLICATION = "pisa.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "data" / "db.sqlite3",
+# SQLite is plenty for a single class or department. Set DATABASE_URL (e.g.
+# postgres://user:pass@host:5432/dbname) to run against Postgres instead, once load actually
+# calls for multiple workers (see TODO.md).
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if DATABASE_URL:
+    import dj_database_url
+
+    DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": str(BASE_DIR / "data" / "db.sqlite3"),
+        }
     }
-}
 
 
 # Password validation
@@ -236,7 +268,7 @@ STORAGES = {
     },
 }
 # Test-runner adjustments. CI runs the suite with DEBUG off (only SECRET_KEY is set), which
-# turns on the production hardening below — but two of those settings break the test client:
+# turns on the production hardening below, but two of those settings break the test client:
 #   * the manifest static storage needs a collectstatic manifest the tests never build, and
 #   * SECURE_SSL_REDIRECT 301-redirects every request (the test client always speaks plain HTTP).
 # Neutralise both only while the test runner is active.
@@ -288,7 +320,7 @@ LEAN_SANDBOX_ALLOW_ENV = [
     if name.strip()
 ]
 # POSIX rlimits for a Lean process (0 = unset). CPU seconds defaults to 4x LEAN_TIMEOUT (a
-# backstop — the wall-clock timeout is the primary guard). Memory/file-size/process caps are
+# backstop; the wall-clock timeout is the primary guard). Memory/file-size/process caps are
 # off by default; tune them per workload, or prefer container limits / LEAN_SANDBOX_WRAPPER.
 LEAN_SANDBOX_CPU_SECONDS = int(os.environ.get("LEAN_SANDBOX_CPU_SECONDS", "0"))
 LEAN_SANDBOX_MEMORY_MB = int(os.environ.get("LEAN_SANDBOX_MEMORY_MB", "0"))
@@ -300,7 +332,7 @@ LEAN_SANDBOX_MAX_PROCESSES = int(os.environ.get("LEAN_SANDBOX_MAX_PROCESSES", "0
 # substituted by sandbox.wrap_argv) writable. bubblewrap is installed in the image; running it
 # inside Docker needs the relaxed seccomp profile the compose files set
 # (`security_opt: ["seccomp:unconfined"]`). Set LEAN_SANDBOX_WRAPPER="" to disable (e.g. on a
-# host without bubblewrap — but then untrusted Lean keeps filesystem/network access).
+# host without bubblewrap, but then untrusted Lean keeps filesystem/network access).
 LEAN_SANDBOX_WRAPPER = shlex.split(
     os.environ.get(
         "LEAN_SANDBOX_WRAPPER",
@@ -316,7 +348,7 @@ LEAN_SANDBOX_WRAPPER = shlex.split(
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 # Negative-path views legitimately return 4xx in tests; django.request logs those at WARNING
 # (with a full traceback for PermissionDenied), which buries real failures in the test output.
-# Quiet it to ERROR under the test runner — genuine 5xx server errors still surface.
+# Quiet it to ERROR under the test runner: genuine 5xx server errors still surface.
 REQUEST_LOG_LEVEL = "ERROR" if "test" in sys.argv else "WARNING"
 LOGGING = {
     "version": 1,

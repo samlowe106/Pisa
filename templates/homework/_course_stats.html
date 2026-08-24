@@ -6,7 +6,7 @@
                 <div class="grade-group">
                     <div class="grade-bars">
                         {% for bar in group.bars %}
-                        <div class="grade-bar {{ bar.color_class }}" data-height="{{ bar.height|floatformat:0 }}" title="{{ bar.label }} — {{ group.letter }}: {{ bar.count }}">
+                        <div class="grade-bar {{ bar.color_class }}" data-height="{{ bar.height|floatformat:0 }}" title="{{ bar.label }} - {{ group.letter }}: {{ bar.count }}">
                             {% if bar.count %}<span class="grade-bar-count">{{ bar.count }}</span>{% endif %}
                         </div>
                         {% endfor %}
@@ -17,7 +17,7 @@
             </div>
             <ul class="chart-legend">
                 {% for s in grade_sections %}
-                <li><span class="legend-swatch {{ s.color_class }}" aria-hidden="true"></span>{{ s.course.display_name }} — {{ s.num_students }} student{{ s.num_students|pluralize }}{% if s.ungraded %}, {{ s.ungraded }} with no graded work{% endif %}</li>
+                <li><span class="legend-swatch {{ s.color_class }}" aria-hidden="true"></span>{{ s.course.display_name }}: {{ s.num_students }} student{{ s.num_students|pluralize }}{% if s.ungraded %}, {{ s.ungraded }} with no graded work{% endif %}</li>
                 {% endfor %}
             </ul>
             {% else %}
@@ -48,7 +48,7 @@
 
         <c-card heading="Compare sections">
             {% if compare_options %}
-            <p class="meta">Hypothesis tests between this section and another offering. <strong>Observational</strong> — a difference may reflect cohort, term, or content drift, not teaching. With small classes, “not significant” usually means underpowered; weigh the effect sizes.</p>
+            <p class="meta">Hypothesis tests between this section and another offering. <strong>Observational</strong>: a difference may reflect cohort, term, or content drift, not teaching. With small classes, “not significant” usually means underpowered; weigh the effect sizes.</p>
             <p class="section-compare-links">
                 {% for o in compare_options %}
                 <a class="button secondary{% if o.slug == compare_active %} is-active{% endif %}" href="?cmp={{ o.slug }}#stats">vs {{ o.display_name }}</a>

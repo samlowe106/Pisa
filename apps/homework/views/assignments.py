@@ -30,7 +30,7 @@ def _assignment_by_slug(assignment_queryset, kwargs):
 
 class AssignmentListView(LoginRequiredMixin, ListView):
     """A student's published assignments across the courses they're enrolled in. Assignments
-    are course-specific, so this page is only for students — staff manage assignments from
+    are course-specific, so this page is only for students; staff manage assignments from
     each course's page."""
 
     model = Assignment

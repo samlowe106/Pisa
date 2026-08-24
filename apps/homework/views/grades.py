@@ -53,7 +53,7 @@ class GradesView(LoginRequiredMixin, TemplateView):
 
 
 class BaseExportGradesView(LoginRequiredMixin, View):
-    """Export a course's grades (course instructors and site admins only — not TAs).
+    """Export a course's grades (course instructors and site admins only, not TAs).
 
     Subclasses set ``export_func`` to the exports.py function for their format.
     """

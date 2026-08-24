@@ -7,12 +7,16 @@ services:
     ports:
       - "8000:8000"
     # Lets the default bubblewrap Lean sandbox create its namespaces/mounts (see the prod
-    # compose for the rationale) — all three are required: Docker's default seccomp profile
+    # compose for the rationale): all three are required. Docker's default seccomp profile
     # blocks the unshare, its default AppArmor profile blocks the mount calls ("bwrap: Failed
     # to make / slave: Permission denied"), and its masked /proc paths make the kernel refuse
-    # bwrap's fresh procfs mount ("bwrap: Can't mount proc on /newroot/proc").
+    # bwrap's fresh procfs mount ("bwrap: Can't mount proc on /newroot/proc"). The seccomp
+    # profile below (docker/seccomp/pisa.json) replaces Docker's default with one that still
+    # allows what bwrap needs but explicitly denies the syscalls a sandboxed Lean process has
+    # no legitimate reason to use (ptrace, bpf, kernel-module/keyring calls, …); AppArmor stays
+    # unconfined because loading a tighter profile takes root on the host (see TODO.md).
     security_opt:
-      - seccomp:unconfined
+      - seccomp=docker/seccomp/pisa.json
       - apparmor:unconfined
       - systempaths=unconfined
     volumes:

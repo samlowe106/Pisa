@@ -5,7 +5,7 @@ from .selectors import is_student_anywhere
 def roles(request):
     """Per-request role flags for templates (nav, buttons).
 
-    - ``is_site_admin``: Django staff flag — runs the whole site, creates courses.
+    - ``is_site_admin``: Django staff flag; runs the whole site, creates courses.
     - ``is_instructor_anywhere``: admin, or an instructor of at least one course.
     - ``is_course_staff_anywhere``: the above, or a TA of at least one course.
     - ``is_student_anywhere``: enrolled as a student in at least one course (gates the

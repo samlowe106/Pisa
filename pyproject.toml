@@ -3,8 +3,10 @@ name = "pisa"
 version = "0.1.0"
 description = ""
 authors = [{ name = "Samuel Lowe", email = "samlowe106@gmail.com" }]
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 # Matches the interpreter the app actually runs on (.python-version, python:3.14-slim in the
-# Dockerfile) — and with 3.14's deferred annotations (PEP 649), `from __future__ import
+# Dockerfile), and with 3.14's deferred annotations (PEP 649), `from __future__ import
 # annotations` is never needed.
 requires-python = ">=3.14,<4"
 readme = "README.md"
@@ -14,13 +16,17 @@ classifiers = [
 ]
 dependencies = [
     "channels>=4.3.2",
+    "channels-redis>=4.3.0",
     "daphne>=4.2.2",
+    "dj-database-url>=3.0.1",
     "django>=5.2.16,<6",
     "django-cotton>=2.0",
     "django-csp>=4.0",
     "openpyxl>=3.1.5",
     "pillow>=12.3.0",
+    "psycopg[binary]>=3.2.10",
     "python-dotenv>=1.2.2",
+    "redis>=6.2.0",
     "sentry-sdk[django]>=2.63.0",
     "whitenoise>=6.12.0",
 ]
@@ -55,8 +61,10 @@ omit = [
 
 [tool.coverage.report]
 show_missing = true
-# No `fail_under` yet: the suite has 0 tests, so a coverage gate would fail CI.
-# Raise this once a baseline test suite exists.
+# 90, a few points under the current ~93% total, so the gate has headroom for ordinary changes
+# without being toothless. Raise it if the margin grows; a drop that trips this means a real
+# testing gap, not noise (branch coverage catches untested conditionals, not just dead lines).
+fail_under = 90
 
 [tool.black]
 # Pinned below the runtime version (3.14) on purpose: targeting py314+ makes black rewrite
@@ -68,7 +76,7 @@ target-version = ["py313"]
 
 [tool.mypy]
 # django-stubs teaches mypy about managers (.objects), field descriptors (a CharField is a
-# str at runtime), and QuerySet types — so mypy actually understands the ORM instead of
+# str at runtime), and QuerySet types, so mypy actually understands the ORM instead of
 # treating it as Any. Kept otherwise lenient (no strict-optional) to match prior behaviour;
 # tighten later by turning on strict_optional / check_untyped_defs.
 plugins = ["mypy_django_plugin.main"]

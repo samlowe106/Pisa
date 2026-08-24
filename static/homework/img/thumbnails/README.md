@@ -6,7 +6,7 @@ automatically in the course-form thumbnail picker, keyed by filename.
 ## From Wikimedia Commons (automated)
 
 The Commons-fetched presets are **not in version control** (they and their `originals/` are
-gitignored) — [`sources.txt`](sources.txt) is the list of record. After a fresh checkout:
+gitignored); [`sources.txt`](sources.txt) is the list of record. After a fresh checkout:
 
 ```sh
 manage.py fetch_commons_thumbnail --from-file
@@ -32,7 +32,7 @@ resampled, the untouched full-resolution original is also kept in `originals/` (
 ## Attribution (manual)
 
 To credit an image by hand, add a sidecar JSON file with the **same name** next to it
-(`mitosis.jpg` → `mitosis.json`). Every field is optional:
+(`mitosis.jpg` becomes `mitosis.json`). Every field is optional:
 
 ```json
 {
@@ -45,7 +45,7 @@ To credit an image by hand, add a sidecar JSON file with the **same name** next 
 }
 ```
 
-When a course uses that preset, the credit renders automatically under the course description —
-e.g. *Thumbnail: **Mitosis** by **Jane Doe** (CC BY-SA 4.0)*, with `title`→`source_url`,
-`author`→`author_url`, and `license`→`license_url` linked when present. Nothing to type into the
-description by hand, and the credit stays attached to the image.
+When a course uses that preset, the credit renders automatically under the course description,
+e.g. *Thumbnail: **Mitosis** by **Jane Doe** (CC BY-SA 4.0)*, with `title`, `author`, and `license`
+linked to `source_url`, `author_url`, and `license_url` respectively when present. Nothing to type
+into the description by hand, and the credit stays attached to the image.

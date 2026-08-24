@@ -3,7 +3,7 @@
  *
  * Each problem is a row with a ≡ handle on the left. Dragging a handle reorders the rows;
  * on drop we relabel "Problem N", rewrite the position-based links, and POST the new order
- * to the server. Uses the native HTML5 Drag-and-Drop API — no dependencies. Loaded with
+ * to the server. Uses the native HTML5 Drag-and-Drop API, no dependencies. Loaded with
  * `defer` from assignment_detail.html, so the DOM is ready when this runs.
  */
 (function () {

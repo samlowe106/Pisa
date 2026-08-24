@@ -43,7 +43,7 @@ build
 dist
 uploads
 
-# collectstatic output — the entrypoint regenerates it on every start
+# collectstatic output: the entrypoint regenerates it on every start
 staticfiles/
 
 # Commons-fetched thumbnail presets: keep the image lean by excluding the full-res

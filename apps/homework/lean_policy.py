@@ -6,7 +6,7 @@ This module is the policy catalogue (``RULES``) plus the checks that enforce it,
 1. ``scan()`` rejects disallowed constructs in the student's editable code *before* Lean runs.
    It's a literal text scan (matches inside comments/strings, evadable), so it's the first,
    cheap line of defence.
-2. ``forbidden_axioms()`` audits a ``#print axioms`` report *after* a successful compile — the
+2. ``forbidden_axioms()`` audits a ``#print axioms`` report *after* a successful compile: the
    un-evadable backstop for the soundness rules (catches ``sorry``/``axiom``/``native_decide``
    however they got in).
 
@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass
 
 # Rule categories.
-UNSOUND = "unsound"  # lets a false/unproven statement typecheck — grade integrity
+UNSOUND = "unsound"  # lets a false/unproven statement typecheck: grade integrity
 SYSTEM = "system"  # touches the OS: files, processes, FFI
 NETWORK = "network"  # opens network connections
 ESCAPE = "escape"  # runs arbitrary code at elaboration time (metaprogramming)
@@ -98,7 +98,7 @@ def scan(code: str, *, allowed: frozenset = frozenset()) -> list:
     """Return the rules that match ``code``. ``allowed`` re-permits specific rule ids (e.g. a
     problem that legitimately wants ``#eval``).
 
-    NOTE: a literal text scan — it also matches inside comments and strings, and can be evaded
+    NOTE: a literal text scan, it also matches inside comments and strings, and can be evaded
     (whitespace, Unicode lookalikes). The ``#print axioms`` post-check below is the
     un-evadable backstop for the soundness rules.
     """
@@ -130,7 +130,7 @@ def parse_axioms(lean_output: str):
 
 
 def forbidden_axioms(lean_output: str, *, allowed=frozenset()):
-    """Axioms the proof depends on that aren't allowed — i.e. outside Lean's standard sound
+    """Axioms the proof depends on that aren't allowed, i.e. outside Lean's standard sound
     axioms plus the problem's ``allowed`` set. ``sorryAx`` (left by ``sorry``/``admit``) is
     never standard, so it always shows up here. Returns ``None`` if there was no axiom report
     to check (caller decides how to treat that)."""

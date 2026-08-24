@@ -135,7 +135,7 @@ class CourseForm(forms.ModelForm):
                         f"{member.email} is also listed under {role_of[member.pk]}.",
                     )
                 role_of[member.pk] = role
-        # An upload wins over a preset — don't persist a stale preset alongside it.
+        # An upload wins over a preset: don't persist a stale preset alongside it.
         if cleaned.get("thumbnail") and cleaned.get("thumbnail_preset"):
             cleaned["thumbnail_preset"] = ""
         # Grade cutoffs must strictly descend (A > B > C > D).
@@ -193,7 +193,7 @@ class ProblemForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxSelectMultiple,
         choices=[
-            (rule.id, f"{rule.id} ({rule.category}) — {rule.reason}")
+            (rule.id, f"{rule.id} ({rule.category}): {rule.reason}")
             for rule in lean_policy.RULES
         ],
         label="Allowed constructs",

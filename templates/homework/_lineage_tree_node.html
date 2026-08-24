@@ -1,0 +1,17 @@
+{% comment %}One node of a course renewal lineage tree (apps/homework/ops.py:course_lineage_tree).
+Included recursively; `node` is {"course", "depth", "children"}, `current` is the course whose
+page this is (marked distinctly rather than linked to itself).{% endcomment %}
+<li class="lineage-node">
+    {% if node.course.pk == current.pk %}
+    <span class="lineage-current">{{ node.course.display_name }}</span>
+    {% else %}
+    <a href="{{ node.course.get_absolute_url }}">{{ node.course.display_name }}</a>
+    {% endif %}
+    {% if node.children %}
+    <ul class="lineage-tree">
+        {% for child in node.children %}
+        {% include 'homework/_lineage_tree_node.html' with node=child current=current %}
+        {% endfor %}
+    </ul>
+    {% endif %}
+</li>

@@ -1,16 +1,16 @@
 """Defensive execution of untrusted Lean.
 
 Student-submitted Lean is arbitrary code (elaboration can run IO via `#eval`/metaprograms),
-so every Lean process — the one-shot grader (``lean_runner.run_lean_process``) and the
-long-lived LSP server (``consumers.LeanLSPConsumer``) — is launched through here.
+so every Lean process, the one-shot grader (``lean_runner.run_lean_process``) and the
+long-lived LSP server (``consumers.LeanLSPConsumer``), is launched through here.
 
 Two layers, both gated by ``LEAN_SANDBOX_ENABLED``:
 
 * Layer 1 (always available, no system deps): a stripped environment so the child can't read
   app secrets, POSIX resource limits (CPU / memory / file-size / process count, and no core
   dumps), and its own process group so a runaway tree can be killed as a unit.
-* Layer 2 (on by default): ``LEAN_SANDBOX_WRAPPER`` prepends an external sandbox runner —
-  bubblewrap by default — for network / filesystem / syscall isolation (no network, read-only
+* Layer 2 (on by default): ``LEAN_SANDBOX_WRAPPER`` prepends an external sandbox runner,
+  bubblewrap by default, for network / filesystem / syscall isolation (no network, read-only
   filesystem, only the per-execution temp dir writable). Set it empty to disable.
 """
 
@@ -88,8 +88,8 @@ def popen_kwargs(cpu_seconds=None) -> dict:
 
 def wrap_argv(argv, *, workdir=None) -> list:
     """Prepend the external sandbox runner (LEAN_SANDBOX_WRAPPER), if configured. Any
-    ``{workdir}`` token in the wrapper is replaced with ``workdir`` — the per-execution temp
-    directory the Lean file lives in — so a read-only-filesystem sandbox (bubblewrap) can still
+    ``{workdir}`` token in the wrapper is replaced with ``workdir`` (the per-execution temp
+    directory the Lean file lives in), so a read-only-filesystem sandbox (bubblewrap) can still
     bind that one directory in (e.g. ``--bind {workdir} {workdir} --chdir {workdir}``).
     """
     if not _conf("LEAN_SANDBOX_ENABLED", True):

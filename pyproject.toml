@@ -2,7 +2,7 @@
 name = "pisa"
 version = "0.1.0"
 description = ""
-authors = [{ name = "Samuel Lowe", email = "samlowe106@gmail.com" }]
+authors = [{ name = "Samuel Lowe", email = "sam@samlowe.dev" }]
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 # Matches the interpreter the app actually runs on (.python-version, python:3.14-slim in the
@@ -92,21 +92,75 @@ django_settings_module = "pisa.settings"
 extend-exclude = ["*/migrations/*"]
 
 [tool.ruff.lint]
-# On top of Ruff's defaults (E4/E7/E9/F). Full list: https://docs.astral.sh/ruff/rules/
-extend-select = [
-    # Ruff's defaults already keep *module-level* imports at the top of the file (E402).
-    # PLC0415 extends that to forbid imports inside functions/methods, so every import
-    # lives at the top of its file.
-    "PLC0415",
-    "I",    # isort: import ordering
-    "UP",   # pyupgrade: modern syntax for the target Python version
-    "B",    # flake8-bugbear: likely bugs and footguns
-    "SIM",  # flake8-simplify: simpler equivalent code
-    "RET",  # flake8-return: return-statement hygiene
-    "LOG",  # flake8-logging: correct logging usage
-    "G",    # flake8-logging-format: no f-strings / % in log calls
-    "PERF", # perflint: performance anti-patterns
-    "T20",  # flake8-print: flags stray print()
+# Everything Ruff has, minus the families below. Full list: https://docs.astral.sh/ruff/rules/
+select = ["ALL"]
+ignore = [
+    # Owned by Black, not Ruff: Black already enforces line length, quote style, and comma/
+    # whitespace placement; these either fight the formatter's output or duplicate it. This is
+    # ruff's own documented "disable when pairing with a formatter" list:
+    # https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    "COM812",
+    "COM819",
+    "D206",
+    "D300",
+    "E111",
+    "E114",
+    "E117",
+    "E501",
+    "ISC001",
+    "ISC002",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "W191",
+    # pydocstyle: wants a docstring on every public module, class, and function. Direction is
+    # to turn this on, but ~700 pre-existing spots (mostly missing method/class docstrings) would
+    # fail immediately; backfilling that backlog and re-enabling D is tracked in TODO.md rather
+    # than done as one mechanical pass here.
+    "D",
+    # flake8-annotations: wants a type annotation on every parameter and return. Same story as
+    # D above: the goal is full coverage, but ~760 pre-existing spots aren't typed yet. See
+    # TODO.md for the backfill-then-re-enable plan.
+    "ANN",
+    # flake8-pytest-style: assumes pytest idioms (bare `assert`, fixtures, `pytest.raises`).
+    # Every test in this repo is Django's `TestCase`/`unittest`-style on purpose (DB fixtures,
+    # `assertEqual`/`assertIn`/etc.), so these rules would just push against the test framework
+    # actually in use rather than flag a real problem.
+    "PT",
+    # flake8-copyright: wants a copyright header block on every file. Whether/how to add
+    # per-file license headers is a separate policy decision from lint strictness; skip it here
+    # rather than stamp 60+ files with headers nobody asked for.
+    "CPY",
+    # flake8-tidy-imports' absolute-only-imports rule: `from .models import X` / `from ..forms
+    # import Y` is the normal, idiomatic way to reference sibling modules within a Django app;
+    # this project uses it deliberately throughout apps/homework.
+    "TID252",
+    # Cyclomatic/structural complexity nudges (too-many-branches/-statements/-arguments/
+    # -returns, nested-if -> elif, mccabe). Refactoring already-tested, working code purely to
+    # bring a complexity score under a threshold is a real-risk, low-reward trade here; some of
+    # what they'd flag (grade_lean_submission's branching, the stats module's math) is inherent
+    # to the domain, not accidental.
+    "C901",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR5501",
+    # Magic-value-comparison: flags small literals like `< 2` even when the surrounding code
+    # (docstring, variable names) already makes the threshold self-evident (e.g. "need at least
+    # two points for sample variance"). High false-positive rate for exactly that pattern; the
+    # genuinely-worth-naming cases get named on their own merits, not because a linter insists.
+    "PLR2004",
+    # tryceratops' "define a custom exception class instead of a message string": for a
+    # handful of one-off validation/CLI errors, a whole exception subclass per raise site is
+    # more ceremony than the message it replaces, for no behavioral gain.
+    "TRY003",
+    # flake8-errmsg: same objection as TRY003 above, one level lighter (wants the message
+    # assigned to a variable before `raise` instead of a whole exception subclass), but the
+    # same "ceremony for a one-off validation/CLI error" trade-off applies.
+    "EM101",
+    "EM102",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -114,5 +168,37 @@ extend-select = [
 # ImportError and print a "did you forget to activate your virtualenv?" hint. Hoisting the import
 # to module level would turn that into a bare traceback, so PLC0415 is a false positive here.
 "manage.py" = ["PLC0415"]
-# Standalone CLI helpers: print *is* their output.
-"scripts/*" = ["T201"]
+# Standalone CLI helpers: print *is* their output, and they shell out to fixed, hardcoded
+# dev-tool names (elan, the Lean binary they just found), never user-controlled input.
+"scripts/*" = ["T201", "S603", "S607"]
+# Tests: reaching into "private" internals under test (SLF001) is routine, not a smell; the
+# hardcoded strings flake8-bandit flags as secrets/paths (S105/S106/S108) are fixture values in
+# tests that check env-var/path handling, never real credentials; the subprocess calls (S603/
+# S607) run fixed dev tools (bwrap, sleep, python3) to probe sandbox behavior, not user input;
+# a mock's side_effect callable (ARG005) must match the signature of what it's replacing,
+# whether every parameter is used or not; and test_stats.py's seeded `random.Random(...)`
+# (S311) is for reproducible test data, not security.
+"apps/homework/tests/*" = [
+    "SLF001",
+    "S105",
+    "S106",
+    "S108",
+    "S603",
+    "S607",
+    "ARG005",
+    "S311",
+]
+# create_test_data.py embeds real Lean 4 source (as a Python string constant) using Lean's own
+# notation (`ℕ`), the same carve-out CLAUDE.md already documents for unicode arrows in Lean
+# source: real language syntax, not prose, and a plain end-of-line noqa can't reach inside a
+# multi-line string literal without corrupting the Lean text it's flagging.
+"apps/homework/management/commands/create_test_data.py" = ["RUF001"]
+# RUF012 (mutable class-attribute default) doesn't know Django's `Meta` inner classes, model
+# `*_CHOICES` lists, and ModelAdmin/ModelForm declarative attributes: Django's metaclasses
+# consume these once at class-definition time and never expose them for runtime mutation, so
+# there's no actual shared-mutable-state hazard, just the ordinary Django idiom every model/
+# form/admin in this framework is written with. `typing.ClassVar`-annotating a `Meta.ordering`
+# would be correct-but-alien to how Django code looks; not worth it for a false alarm.
+"apps/homework/models.py" = ["RUF012"]
+"apps/homework/forms.py" = ["RUF012"]
+"apps/homework/admin.py" = ["RUF012"]

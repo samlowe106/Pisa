@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+from typing import TYPE_CHECKING
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -36,6 +37,10 @@ from ..selectors import editable_courses
 from ..utils import display_name
 from .mixins import StaffRequiredMixin
 
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+    from django.http import HttpResponse
+
 # POST `role` value -> the Course M2M it maps to.
 ROLE_RELATIONS = {"instructor": "instructors", "ta": "tas", "student": "students"}
 
@@ -46,7 +51,7 @@ class CourseListView(LoginRequiredMixin, TemplateView):
 
     template_name = "homework/course_list.html"
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         active, previous = course_cards_for(self.request.user)
         context["active_cards"] = active
@@ -59,17 +64,171 @@ class CourseListView(LoginRequiredMixin, TemplateView):
         return context
 
 
+def _assignment_rows(
+    course: Course,
+    assignments: list,
+    problems: list,
+    passes_per_problem: Counter,
+    num_students: int,
+) -> list[dict]:
+    """Per-assignment problem tables: each problem's URL and class-average pass rate."""
+    problems_by_assignment = defaultdict(list)
+    for problem in problems:
+        problems_by_assignment[problem.assignment_id].append(problem)
+
+    assignment_rows = []
+    for assignment in assignments:
+        rows = []
+        for number, problem in enumerate(
+            problems_by_assignment.get(assignment.id, []), start=1
+        ):
+            passed = passes_per_problem.get(problem.id, 0)
+            rows.append(
+                {
+                    "number": number,
+                    "problem": problem,
+                    "passed": passed,
+                    "mean_percent": (
+                        passed / num_students * 100 if num_students else None
+                    ),
+                    "mean_points": (
+                        passed / num_students * problem.points if num_students else None
+                    ),
+                    "url": reverse(
+                        "homework:problem_detail",
+                        kwargs={
+                            "course_slug": course.slug,
+                            "assignment_slug": assignment.slug,
+                            "number": number,
+                        },
+                    ),
+                }
+            )
+        assignment_rows.append({"assignment": assignment, "problems": rows})
+    return assignment_rows
+
+
+def _roster(
+    students_qs,
+    *,
+    is_course_staff: bool,
+    passed_pairs: set,
+    problems: list,
+    published_assignment_ids: set,
+) -> list[dict]:
+    """The course roster: staff see each student's earned/possible/percent (published points
+    only); a student sees just their classmates' names."""
+    if not is_course_staff:
+        return [
+            {"id": student.id, "name": display_name(student)} for student in students_qs
+        ]
+    points_by_problem = {
+        problem.id: problem.points
+        for problem in problems
+        if problem.assignment_id in published_assignment_ids
+    }
+    total_possible = sum(points_by_problem.values())
+    earned_by_user = earned_totals(passed_pairs, points_by_problem)
+    return [
+        {
+            "id": student.id,
+            "name": display_name(student),
+            "earned": earned_by_user.get(student.id, 0),
+            "possible": total_possible,
+            "percent": (
+                earned_by_user.get(student.id, 0) / total_possible * 100
+                if total_possible
+                else None
+            ),
+        }
+        for student in students_qs
+    ]
+
+
+def _assignment_stats(
+    assignments: list,
+    problems: list,
+    ep,
+    *,
+    problem_to_assignment: dict,
+    points_by_problem_all: dict,
+    num_students: int,
+) -> list[dict]:
+    """Per-assignment submitter counts and mean score, for the statistics tab's table."""
+    assignment_total_points: dict[int, int] = defaultdict(int)
+    for problem in problems:
+        assignment_total_points[problem.assignment_id] += problem.points
+
+    # Distinct students who submitted anything to each assignment, and the points each
+    # submitter earned per assignment (under the scoring policy).
+    submitters_per_assignment = submitters_by_assignment(ep.rows, problem_to_assignment)
+    earned_per_assignment = earned_by_assignment(
+        ep.passed_pairs, points_by_problem_all, problem_to_assignment
+    )
+
+    assignment_stats = []
+    for assignment in assignments:
+        submitters = submitters_per_assignment.get(assignment.id, set())
+        total_points = assignment_total_points.get(assignment.id, 0)
+        if submitters and total_points:
+            mean_score = sum(
+                earned_per_assignment[assignment.id].get(uid, 0) / total_points * 100
+                for uid in submitters
+            ) / len(submitters)
+        else:
+            mean_score = None  # nobody submitted (or nothing to score)
+        assignment_stats.append(
+            {
+                "assignment": assignment,
+                "submitters": len(submitters),
+                "num_students": num_students,
+                "mean_score": mean_score,
+            }
+        )
+    return assignment_stats
+
+
+def _section_comparison_context(
+    course: Course, grade_sections: list, requested_slug: str | None
+) -> dict:
+    """The comparison-picker options plus, when ``?cmp=<slug>`` names another section, the
+    computed comparison for it. Computed only on request so a normal page load doesn't pay
+    for the permutation tests."""
+    others = [
+        section["course"]
+        for section in grade_sections
+        if section["course"].pk != course.pk
+    ]
+    result: dict = {"compare_options": others}
+    if not requested_slug:
+        return result
+    other = next((c for c in others if c.slug == requested_slug), None)
+    if other is None:
+        return result
+    counts = {s["course"].pk: s["counts"] for s in grade_sections}
+    result["comparison"] = compare_two_sections(
+        course,
+        other,
+        [counts[course.pk][letter] for letter in _GRADE_LETTERS],
+        [counts[other.pk][letter] for letter in _GRADE_LETTERS],
+    )
+    result["compare_active"] = other.slug
+    return result
+
+
 class CourseDetailView(LoginRequiredMixin, DetailView):
+    """A course's assignment/problem tables, roster, and (staff only) the statistics tab."""
+
     model = Course
     template_name = "homework/course_detail.html"
     context_object_name = "course"
     slug_field = "slug"
     slug_url_kwarg = "slug"
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         return Course.objects.all()
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         course = self.object
         user = self.request.user
@@ -101,43 +260,9 @@ class CourseDetailView(LoginRequiredMixin, DetailView):
         ep = earned_points(course, points_by_problem_all, enrolled_ids)
         passes_per_problem = Counter(problem_id for _, problem_id in ep.passed_pairs)
 
-        problems_by_assignment = defaultdict(list)
-        for problem in problems:
-            problems_by_assignment[problem.assignment_id].append(problem)
-
-        assignment_rows = []
-        for assignment in assignments:
-            rows = []
-            for number, problem in enumerate(
-                problems_by_assignment.get(assignment.id, []), start=1
-            ):
-                passed = passes_per_problem.get(problem.id, 0)
-                rows.append(
-                    {
-                        "number": number,
-                        "problem": problem,
-                        "passed": passed,
-                        "mean_percent": (
-                            passed / num_students * 100 if num_students else None
-                        ),
-                        "mean_points": (
-                            passed / num_students * problem.points
-                            if num_students
-                            else None
-                        ),
-                        "url": reverse(
-                            "homework:problem_detail",
-                            kwargs={
-                                "course_slug": course.slug,
-                                "assignment_slug": assignment.slug,
-                                "number": number,
-                            },
-                        ),
-                    }
-                )
-            assignment_rows.append({"assignment": assignment, "problems": rows})
-
-        context["assignment_rows"] = assignment_rows
+        context["assignment_rows"] = _assignment_rows(
+            course, assignments, problems, passes_per_problem, num_students
+        )
         context["num_students"] = num_students
         context["scoring_method_label"] = course.get_scoring_method_display()
         context["is_course_staff"] = is_course_staff
@@ -163,117 +288,54 @@ class CourseDetailView(LoginRequiredMixin, DetailView):
             students_qs = course.students.order_by(
                 "last_name", "first_name", "username"
             )
-            if is_course_staff:
-                published_assignment_ids = {a.id for a in assignments if a.is_published}
-                points_by_problem = {
-                    problem.id: problem.points
-                    for problem in problems
-                    if problem.assignment_id in published_assignment_ids
-                }
-                total_possible = sum(points_by_problem.values())
-                earned_by_user = earned_totals(ep.passed_pairs, points_by_problem)
-                students = [
-                    {
-                        "id": student.id,
-                        "name": display_name(student),
-                        "earned": earned_by_user.get(student.id, 0),
-                        "possible": total_possible,
-                        "percent": (
-                            earned_by_user.get(student.id, 0) / total_possible * 100
-                            if total_possible
-                            else None
-                        ),
-                    }
-                    for student in students_qs
-                ]
-            else:
-                students = [
-                    {"id": student.id, "name": display_name(student)}
-                    for student in students_qs
-                ]
+            published_assignment_ids = {a.id for a in assignments if a.is_published}
+            context["students"] = _roster(
+                students_qs,
+                is_course_staff=is_course_staff,
+                passed_pairs=ep.passed_pairs,
+                problems=problems,
+                published_assignment_ids=published_assignment_ids,
+            )
         else:
-            students = []
-        context["students"] = students
+            context["students"] = []
 
         # region Statistics tab (staff only)
         if is_course_staff:
-            assignment_total_points: dict[int, int] = defaultdict(int)
-            for problem in problems:
-                assignment_total_points[problem.assignment_id] += problem.points
-
-            # Distinct students who submitted anything to each assignment, and the points each
-            # submitter earned per assignment (under the scoring policy).
-            submitters_per_assignment = submitters_by_assignment(
-                ep.rows, problem_to_assignment
+            context["assignment_stats"] = _assignment_stats(
+                assignments,
+                problems,
+                ep,
+                problem_to_assignment=problem_to_assignment,
+                points_by_problem_all=points_by_problem_all,
+                num_students=num_students,
             )
-            earned_per_assignment = earned_by_assignment(
-                ep.passed_pairs, points_by_problem_all, problem_to_assignment
-            )
-
-            assignment_stats = []
-            for assignment in assignments:
-                submitters = submitters_per_assignment.get(assignment.id, set())
-                total_points = assignment_total_points.get(assignment.id, 0)
-                if submitters and total_points:
-                    mean_score = sum(
-                        earned_per_assignment[assignment.id].get(uid, 0)
-                        / total_points
-                        * 100
-                        for uid in submitters
-                    ) / len(submitters)
-                else:
-                    mean_score = None  # nobody submitted (or nothing to score)
-                assignment_stats.append(
-                    {
-                        "assignment": assignment,
-                        "submitters": len(submitters),
-                        "num_students": num_students,
-                        "mean_score": mean_score,
-                    }
-                )
-            context["assignment_stats"] = assignment_stats
-
             grade_sections, grade_chart = grade_distribution_chart(course)
             context["grade_sections"] = grade_sections
             context["grade_chart"] = grade_chart
-
-            # Section comparison is computed only when explicitly requested (?cmp=<slug>), so a
-            # normal page load doesn't pay for the permutation tests.
-            others = [
-                section["course"]
-                for section in grade_sections
-                if section["course"].pk != course.pk
-            ]
-            context["compare_options"] = others
-            requested = self.request.GET.get("cmp")
-            if requested:
-                other = next((c for c in others if c.slug == requested), None)
-                if other is not None:
-                    counts = {s["course"].pk: s["counts"] for s in grade_sections}
-                    context["comparison"] = compare_two_sections(
-                        course,
-                        other,
-                        [counts[course.pk][letter] for letter in _GRADE_LETTERS],
-                        [counts[other.pk][letter] for letter in _GRADE_LETTERS],
-                    )
-                    context["compare_active"] = other.slug
+            context.update(
+                _section_comparison_context(
+                    course, grade_sections, self.request.GET.get("cmp")
+                )
+            )
         # endregion
 
         return context
 
 
 class CourseCreateView(LoginRequiredMixin, StaffRequiredMixin, CreateView):
+    """Create a course; site admins only. The creator is added as an instructor."""
+
     model = Course
     form_class = CourseForm
     template_name = "homework/course_form.html"
     success_url = reverse_lazy("homework:course_list")
 
-    def get_form_kwargs(self):
+    def get_form_kwargs(self) -> dict:
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
         return kwargs
 
-    def form_valid(self, form):
+    def form_valid(self, form) -> HttpResponse:
         response = super().form_valid(form)
         form.apply_rosters(self.object)
         # The admin who creates a course starts as one of its instructors.
@@ -282,19 +344,21 @@ class CourseCreateView(LoginRequiredMixin, StaffRequiredMixin, CreateView):
 
 
 class CourseUpdateView(LoginRequiredMixin, UpdateView):
+    """Edit a course the user instructs."""
+
     model = Course
     form_class = CourseForm
     template_name = "homework/course_form.html"
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         return editable_courses(self.request.user)
 
-    def get_form_kwargs(self):
+    def get_form_kwargs(self) -> dict:
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
         return kwargs
 
-    def form_valid(self, form):
+    def form_valid(self, form) -> HttpResponse:
         response = super().form_valid(form)
         form.apply_rosters(self.object)
         return response
@@ -305,17 +369,17 @@ class CourseRenewView(LoginRequiredMixin, View):
 
     template_name = "homework/course_renew.html"
 
-    def _course(self, slug):
+    def _course(self, slug: str) -> Course:
         return get_object_or_404(editable_courses(self.request.user), slug=slug)
 
-    def get(self, request, slug):
+    def get(self, request, slug: str) -> HttpResponse:
         return render(
             request,
             self.template_name,
             {"course": self._course(slug), "form": CourseRenewForm()},
         )
 
-    def post(self, request, slug):
+    def post(self, request, slug: str) -> HttpResponse:
         course = self._course(slug)
         form = CourseRenewForm(request.POST)
         if not form.is_valid():
@@ -334,7 +398,9 @@ class CourseRenewView(LoginRequiredMixin, View):
 
 
 class CourseEnrollView(LoginRequiredMixin, View):
-    def post(self, request, slug):
+    """Self-enroll as a student in a course (blocked for the course's own staff)."""
+
+    def post(self, request, slug: str) -> HttpResponse:
         course = get_object_or_404(Course, slug=slug)
         if course.is_course_staff(request.user):
             return HttpResponseBadRequest("Course staff cannot enrol as students.")
@@ -342,7 +408,7 @@ class CourseEnrollView(LoginRequiredMixin, View):
         return redirect("homework:course_detail", slug=slug)
 
 
-def _can_manage_role(course, user, role):
+def _can_manage_role(course: Course, user, role: str) -> bool:
     """Owner of the action: only admins manage instructors; instructors manage TAs/students."""
     if role == "instructor":
         return course.can_manage_instructors(user)
@@ -350,7 +416,10 @@ def _can_manage_role(course, user, role):
 
 
 class CourseAddMemberView(LoginRequiredMixin, View):
-    def post(self, request, slug):
+    """Add a user (by username or email) to a course as instructor/TA/student. Roles are
+    exclusive: adding to a new role removes the other two."""
+
+    def post(self, request, slug: str) -> HttpResponse:
         course = get_object_or_404(Course, slug=slug)
         role = request.POST.get("role")
         if role not in ROLE_RELATIONS:
@@ -376,7 +445,9 @@ class CourseAddMemberView(LoginRequiredMixin, View):
 
 
 class CourseRemoveMemberView(LoginRequiredMixin, View):
-    def post(self, request, slug):
+    """Remove a user from a course's instructor/TA/student roster."""
+
+    def post(self, request, slug: str) -> HttpResponse:
         course = get_object_or_404(Course, slug=slug)
         role = request.POST.get("role")
         if role not in ROLE_RELATIONS:

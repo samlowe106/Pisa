@@ -18,8 +18,12 @@ import contextlib
 import os
 import re
 import signal
+from typing import TYPE_CHECKING
 
 from django.conf import settings
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 try:
     import resource  # POSIX only
@@ -27,7 +31,8 @@ except ImportError:  # pragma: no cover - non-POSIX
     resource = None
 
 
-def _conf(name, *, default):
+def _conf(name: str, *, default):
+    """``getattr(settings, name, default)``, so every sandbox knob has one lookup path."""
     return getattr(settings, name, default)
 
 
@@ -48,12 +53,13 @@ def sandbox_env() -> dict:
     }
 
 
-def _build_preexec(cpu_seconds):
+def _build_preexec(cpu_seconds: int | None) -> Callable[[], None]:
+    """Build the ``preexec_fn`` that applies the configured POSIX resource limits."""
     memory_mb = _conf("LEAN_SANDBOX_MEMORY_MB", default=0)
     fsize_mb = _conf("LEAN_SANDBOX_FSIZE_MB", default=0)
     max_processes = _conf("LEAN_SANDBOX_MAX_PROCESSES", default=0)
 
-    def _apply():  # runs in the child after fork(), before exec()
+    def _apply() -> None:  # runs in the child after fork(), before exec()
         if resource is None:
             return
         limits = [(resource.RLIMIT_CORE, 0)]  # no core dumps
@@ -73,7 +79,7 @@ def _build_preexec(cpu_seconds):
     return _apply
 
 
-def popen_kwargs(cpu_seconds=None) -> dict:
+def popen_kwargs(cpu_seconds: int | None = None) -> dict:
     """kwargs for ``subprocess.Popen`` / ``asyncio.create_subprocess_exec``. Always starts a
     new session so the process group can be killed; adds the stripped env and rlimits when the
     sandbox is enabled. Pass ``cpu_seconds=None`` for long-lived processes (the LSP server) so
@@ -86,7 +92,7 @@ def popen_kwargs(cpu_seconds=None) -> dict:
     return kwargs
 
 
-def wrap_argv(argv, *, workdir=None) -> list:
+def wrap_argv(argv: list[str], *, workdir: str | None = None) -> list[str]:
     """Prepend the external sandbox runner (LEAN_SANDBOX_WRAPPER), if configured. Any
     ``{workdir}`` token in the wrapper is replaced with ``workdir`` (the per-execution temp
     directory the Lean file lives in), so a read-only-filesystem sandbox (bubblewrap) can still

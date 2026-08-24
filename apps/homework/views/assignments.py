@@ -1,4 +1,12 @@
+from typing import TYPE_CHECKING
+
 from django.contrib.auth.mixins import LoginRequiredMixin
+
+# View.as_view() reads cls.dispatch.__annotations__ at class-definition time (to copy them
+# onto the view callable), which forces PEP 649's deferred evaluation to resolve dispatch()'s
+# return annotation immediately: HttpResponseBase must be a real import here, not
+# TYPE_CHECKING-only, or that resolution raises NameError at import time.
+from django.http import HttpResponseBase  # noqa: TC002
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import (
     CreateView,
@@ -18,8 +26,12 @@ from ..selectors import (
 from .mixins import FormsetMixin, ResolvedObjectMixin
 from .problems import ProblemFormSet
 
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+    from django.http import HttpResponse
 
-def _assignment_by_slug(assignment_queryset, kwargs):
+
+def _assignment_by_slug(assignment_queryset, kwargs) -> Assignment:
     """Resolve an assignment from nested URL kwargs (course_slug, assignment_slug)."""
     return get_object_or_404(
         assignment_queryset,
@@ -37,7 +49,7 @@ class AssignmentListView(LoginRequiredMixin, ListView):
     template_name = "homework/assignment_list.html"
     context_object_name = "assignments"
 
-    def dispatch(self, request, *args, **kwargs):
+    def dispatch(self, request, *args, **kwargs) -> HttpResponseBase:
         if request.user.is_authenticated and not is_student_anywhere(request.user):
             return redirect("homework:course_list")
         return super().dispatch(request, *args, **kwargs)
@@ -53,15 +65,18 @@ class AssignmentListView(LoginRequiredMixin, ListView):
 
 
 class AssignmentDetailView(LoginRequiredMixin, ResolvedObjectMixin, DetailView):
+    """An assignment's problems, plus its imported Lean source files: every file for course
+    staff, only the files visible on at least one problem for students."""
+
     model = Assignment
     template_name = "homework/assignment_detail.html"
     context_object_name = "assignment"
     object_resolver = staticmethod(_assignment_by_slug)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         return accessible_assignments(self.request.user)
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         course = self.object.course
         user = self.request.user
@@ -84,12 +99,16 @@ class AssignmentDetailView(LoginRequiredMixin, ResolvedObjectMixin, DetailView):
 
 
 class AssignmentCreateView(LoginRequiredMixin, FormsetMixin, CreateView):
+    """Create an assignment (with its problem formset) in a course the user instructs."""
+
     model = Assignment
     form_class = AssignmentForm
     template_name = "homework/assignment_form.html"
     formset_class = ProblemFormSet
     formset_context_name = "problem_formset"
 
+    # Not return-typed: the direct `.filter(created_by=self.request.user)` below hits the
+    # same User | AnonymousUser gap noted on LeanSourceFileListView.get_queryset.
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
         form.fields["course"].queryset = editable_courses(self.request.user)
@@ -98,7 +117,7 @@ class AssignmentCreateView(LoginRequiredMixin, FormsetMixin, CreateView):
         )
         return form
 
-    def get_initial(self):
+    def get_initial(self) -> dict:
         initial = super().get_initial()
         course_slug = self.kwargs.get("course_slug") or self.request.GET.get("course")
         if course_slug:
@@ -107,17 +126,19 @@ class AssignmentCreateView(LoginRequiredMixin, FormsetMixin, CreateView):
             )
         return initial
 
-    def form_valid(self, form):
+    def form_valid(self, form) -> HttpResponse:
         form.instance.created_by = self.request.user
         return super().form_valid(form)
 
-    def get_success_url(self):
+    def get_success_url(self) -> str:
         return self.object.get_absolute_url()
 
 
 class AssignmentUpdateView(
     LoginRequiredMixin, FormsetMixin, ResolvedObjectMixin, UpdateView
 ):
+    """Edit an assignment (and its problem formset) in a course the user instructs."""
+
     model = Assignment
     form_class = AssignmentForm
     template_name = "homework/assignment_form.html"
@@ -125,9 +146,10 @@ class AssignmentUpdateView(
     formset_context_name = "problem_formset"
     object_resolver = staticmethod(_assignment_by_slug)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         return editable_assignments(self.request.user)
 
+    # Not return-typed: same reason as AssignmentCreateView.get_form above.
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
         form.fields["course"].queryset = editable_courses(self.request.user)
@@ -136,5 +158,5 @@ class AssignmentUpdateView(
         )
         return form
 
-    def get_success_url(self):
+    def get_success_url(self) -> str:
         return self.object.get_absolute_url()

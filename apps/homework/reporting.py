@@ -7,6 +7,7 @@ and every summary builds on it.
 """
 
 from collections import defaultdict
+from datetime import datetime
 from typing import NamedTuple
 
 from django.db.models import Count, Q
@@ -15,8 +16,11 @@ from . import stats
 from .models import Course, Problem, Submission
 from .ops import course_family
 
+# (user_id, problem_id, status, created_at), as returned by Submission.objects.values_list().
+SubmissionRow = tuple[int, int, str, datetime]
 
-def _passed_pairs(submission_rows, scoring_method):
+
+def _passed_pairs(submission_rows, scoring_method: str) -> set[tuple[int, int]]:
     """Set of (user_id, problem_id) pairs that count as *passed* under the course's policy.
 
     ``submission_rows`` is an iterable of ``(user_id, problem_id, status, created_at)``.
@@ -47,12 +51,15 @@ def _passed_pairs(submission_rows, scoring_method):
 class EarnedPoints(NamedTuple):
     """Resolved scores for a set of students on a set of problems, see ``earned_points``."""
 
-    rows: list  # raw (user_id, problem_id, status, created_at) submission rows
-    passed_pairs: set  # {(user_id, problem_id)} passed under the course scoring policy
-    by_user: dict  # {user_id: earned points}; missing user = 0
+    rows: list[SubmissionRow]
+    # (user_id, problem_id) pairs passed under the course's scoring policy
+    passed_pairs: set[tuple[int, int]]
+    by_user: dict[int, int]  # {user_id: earned points}; missing user = 0
 
 
-def earned_points(course, points_by_problem, user_ids):
+def earned_points(
+    course: Course, points_by_problem: dict[int, int], user_ids: list[int]
+) -> EarnedPoints:
     """One round trip from (course, ``{problem_id: points}``, roster) to resolved scores.
 
     Fetches every submission by ``user_ids`` on the given problems and resolves it under
@@ -68,7 +75,9 @@ def earned_points(course, points_by_problem, user_ids):
     return EarnedPoints(rows, passed, earned_totals(passed, points_by_problem))
 
 
-def earned_totals(passed_pairs, points_by_problem):
+def earned_totals(
+    passed_pairs: set[tuple[int, int]], points_by_problem: dict[int, int]
+) -> dict[int, int]:
     """``{user_id: points}`` from passed pairs; pairs outside the points map score 0 (this is
     how the course-detail student table credits only *published* points against passed pairs
     that span drafts)."""
@@ -79,7 +88,11 @@ def earned_totals(passed_pairs, points_by_problem):
     return totals
 
 
-def earned_by_assignment(passed_pairs, points_by_problem, assignment_of):
+def earned_by_assignment(
+    passed_pairs: set[tuple[int, int]],
+    points_by_problem: dict[int, int],
+    assignment_of: dict[int, int],
+) -> dict[int, dict[int, int]]:
     """``{assignment_id: {user_id: earned points}}``. Every ``problem_id`` in ``passed_pairs``
     must appear in ``assignment_of`` (both derive from the same problem fetch)."""
     per: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
@@ -88,15 +101,17 @@ def earned_by_assignment(passed_pairs, points_by_problem, assignment_of):
     return per
 
 
-def submitters_by_assignment(rows, assignment_of):
+def submitters_by_assignment(
+    rows: list[SubmissionRow], assignment_of: dict[int, int]
+) -> dict[int, set[int]]:
     """``{assignment_id: {user_id, ...}}``: distinct users with any submission per assignment."""
-    submitters: dict[int, set] = defaultdict(set)
+    submitters: dict[int, set[int]] = defaultdict(set)
     for user_id, problem_id, _status, _created in rows:
         submitters[assignment_of[problem_id]].add(user_id)
     return submitters
 
 
-def student_course_summary(course, student):
+def student_course_summary(course: Course, student) -> dict:
     """A student's standing in a course: their letter grade plus the count of *open*
     assignments (published assignments where they haven't passed every problem).
 
@@ -137,7 +152,7 @@ def student_course_summary(course, student):
     return {"grade": grade, "open_assignments": open_assignments}
 
 
-def staff_course_summary(course):
+def staff_course_summary(course: Course) -> dict:
     """At-a-glance figures for a course the viewer runs: how many students are enrolled
     and how many assignments are still unpublished drafts (needing the teacher's action).
 
@@ -153,7 +168,7 @@ def staff_course_summary(course):
     return {"student_count": student_count, "draft_assignments": draft_count}
 
 
-def course_cards_for(user):
+def course_cards_for(user) -> tuple[list[dict], list[dict]]:
     """Build ``(active_cards, previous_cards)`` for the course-list landing page.
 
     Each card reflects the user's role *in that course*: course staff get a roster-size
@@ -176,7 +191,8 @@ def course_cards_for(user):
             distinct=True,
         ),
     ).order_by("-created_at")
-    active, previous = [], []
+    active: list[dict] = []
+    previous: list[dict] = []
     for course in courses:
         if course.is_course_staff(user):
             card = {"course": course, "role": "staff", **staff_course_summary(course)}
@@ -193,7 +209,7 @@ def course_cards_for(user):
 _GRADE_LETTERS = ["A", "B", "C", "D", "F"]
 
 
-def course_grade_distribution(course):
+def course_grade_distribution(course: Course) -> dict:
     """How many of ``course``'s enrolled students land in each letter band, plus how many have
     no graded work yet (the course has no published problems with points)."""
     enrolled_ids = list(course.students.values_list("id", flat=True))
@@ -216,7 +232,7 @@ def course_grade_distribution(course):
     return {"counts": counts, "ungraded": ungraded, "num_students": len(enrolled_ids)}
 
 
-def grade_distribution_chart(course):
+def grade_distribution_chart(course: Course) -> tuple[list[dict], list[dict]]:
     """Stats-tab data: each offering (section) in ``course``'s family with its A-F counts, and
     a per-letter list of colour-coded bars scaled to the largest count for rendering."""
     sections = []
@@ -251,7 +267,7 @@ def grade_distribution_chart(course):
     return sections, chart
 
 
-def section_score_data(course):
+def section_score_data(course: Course) -> dict:
     """Per-section samples for the hypothesis tests: every enrolled student's overall course
     percent, and each *submitter's* percent on each assignment (keyed by assignment slug). Also
     returns a slug-to-title map for display."""
@@ -302,7 +318,9 @@ def section_score_data(course):
     return {"overall": overall, "by_assignment": by_assignment, "titles": titles}
 
 
-def compare_two_sections(course_a, course_b, counts_a, counts_b):
+def compare_two_sections(
+    course_a: Course, course_b: Course, counts_a: list[int], counts_b: list[int]
+) -> dict:
     """Full comparison of two sections: overall course grades, the letter-grade mix, and each
     shared assignment (matched by slug), with Benjamini-Hochberg-corrected per-assignment
     p-values. ``counts_*`` are A-F count vectors. Observational, not causal."""

@@ -33,13 +33,13 @@ class TestResult(NamedTuple):
     pvalue: float
 
 
-def _rng(rng):
+def _rng(rng: random.Random | None) -> random.Random:
     # Statistical resampling (permutation tests), not security: reproducibility matters, not
     # unpredictability.
     return rng if rng is not None else random.Random(DEFAULT_SEED)  # noqa: S311
 
 
-def _sample_var(values, m):
+def _sample_var(values: Sample, m: Number) -> float:
     """Unbiased (ddof=1) variance; 0 for fewer than two values."""
     n = len(values)
     if n < 2:
@@ -50,7 +50,7 @@ def _sample_var(values, m):
 # region Primitives (scipy.stats-shaped)
 
 
-def _welch_t(a, b):
+def _welch_t(a: Sample, b: Sample) -> float:
     na, nb = len(a), len(b)
     ma, mb = fmean(a), fmean(b)
     denom = _sample_var(a, ma) / na + _sample_var(b, mb) / nb
@@ -61,7 +61,14 @@ def _welch_t(a, b):
     return (ma - mb) / math.sqrt(denom)
 
 
-def ttest_ind(a, b, *, equal_var=False, n_resamples=DEFAULT_RESAMPLES, rng=None):
+def ttest_ind(
+    a: Sample,
+    b: Sample,
+    *,
+    equal_var: bool = False,
+    n_resamples: int = DEFAULT_RESAMPLES,
+    rng: random.Random | None = None,
+) -> TestResult:
     """Welch's t-test with a *permutation* p-value (studentised permutation: robust to
     unequal variance and non-normality at small n). Returns the Welch t and its two-sided
     permutation p-value.
@@ -83,7 +90,7 @@ def ttest_ind(a, b, *, equal_var=False, n_resamples=DEFAULT_RESAMPLES, rng=None)
     return TestResult(observed, extreme / (n_resamples + 1))
 
 
-def _average_ranks(values):
+def _average_ranks(values: Sample) -> list[float]:
     """1-based ranks with ties broken by the average of the tied positions."""
     order = sorted(range(len(values)), key=lambda i: values[i])
     ranks = [0.0] * len(values)
@@ -99,7 +106,13 @@ def _average_ranks(values):
     return ranks
 
 
-def mannwhitneyu(x, y, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
+def mannwhitneyu(
+    x: Sample,
+    y: Sample,
+    *,
+    n_resamples: int = DEFAULT_RESAMPLES,
+    rng: random.Random | None = None,
+) -> TestResult:
     """Mann-Whitney U (rank-sum), tie-corrected, with a two-sided permutation p-value.
     Returns U for ``x``.
 
@@ -120,7 +133,7 @@ def mannwhitneyu(x, y, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
     return TestResult(observed, extreme / (n_resamples + 1))
 
 
-def chi2_statistic(table):
+def chi2_statistic(table: Sequence[Sequence[int]]) -> float:
     """Pearson χ² statistic for an rxc table of counts."""
     row_totals = [sum(row) for row in table]
     col_totals = [sum(col) for col in zip(*table, strict=True)]
@@ -136,7 +149,12 @@ def chi2_statistic(table):
     return chi2
 
 
-def chi2_contingency(table, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
+def chi2_contingency(
+    table: Sequence[Sequence[int]],
+    *,
+    n_resamples: int = DEFAULT_RESAMPLES,
+    rng: random.Random | None = None,
+) -> TestResult:
     """Pearson χ² for a 2xc table with a permutation p-value (shuffles the row label of the
     underlying individuals), appropriate when expected cell counts are small.
 
@@ -164,7 +182,7 @@ def chi2_contingency(table, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
     return TestResult(observed, extreme / (n_resamples + 1))
 
 
-def false_discovery_control(pvalues, *, method="bh"):
+def false_discovery_control(pvalues: Sample, *, method: str = "bh") -> list[float]:
     """Benjamini-Hochberg adjusted p-values (FDR control). Mirrors
     ``scipy.stats.false_discovery_control(ps, method='bh')``."""
     if method != "bh":
@@ -191,7 +209,7 @@ def false_discovery_control(pvalues, *, method="bh"):
 # region Effect sizes (no direct scipy.stats equivalent)
 
 
-def cohens_d(a, b):
+def cohens_d(a: Sample, b: Sample) -> float:
     """Standardised mean difference using the pooled SD. nan if a group has < 2 values."""
     a, b = list(a), list(b)
     if len(a) < 2 or len(b) < 2:
@@ -205,7 +223,7 @@ def cohens_d(a, b):
     return (fmean(a) - fmean(b)) / math.sqrt(pooled_var)
 
 
-def cliffs_delta(a, b):
+def cliffs_delta(a: Sample, b: Sample) -> float:
     """Cliff's δ = P(a > b) - P(a < b): the nonparametric effect size (= rank-biserial r)."""
     a, b = list(a), list(b)
     if not a or not b:
@@ -215,7 +233,7 @@ def cliffs_delta(a, b):
     return (greater - less) / (len(a) * len(b))
 
 
-def cramers_v(table):
+def cramers_v(table: Sequence[Sequence[int]]) -> float:
     """Cramér's V effect size for a contingency table (0 = no association)."""
     n = sum(sum(row) for row in table)
     if n == 0:
@@ -244,11 +262,17 @@ class ScoreComparison:
     cliffs_delta: float
 
     @property
-    def comparable(self):
+    def comparable(self) -> bool:
         return self.welch is not None
 
 
-def compare_scores(a, b, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
+def compare_scores(
+    a: Sample,
+    b: Sample,
+    *,
+    n_resamples: int = DEFAULT_RESAMPLES,
+    rng: random.Random | None = None,
+) -> ScoreComparison:
     """Full continuous-score comparison: Welch (permutation) + Mann-Whitney + effect sizes.
     Returns a ``ScoreComparison`` whose tests are ``None`` when a group has < 2 observations.
     """
@@ -285,11 +309,17 @@ class LetterComparison:
     cramers_v: float
 
     @property
-    def comparable(self):
+    def comparable(self) -> bool:
         return self.chi2 is not None
 
 
-def compare_letters(counts_a, counts_b, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
+def compare_letters(
+    counts_a: Sequence[int],
+    counts_b: Sequence[int],
+    *,
+    n_resamples: int = DEFAULT_RESAMPLES,
+    rng: random.Random | None = None,
+) -> LetterComparison:
     """Compare two sections' letter-grade mixes (count vectors aligned to the same letters)."""
     counts_a, counts_b = list(counts_a), list(counts_b)
     n_a, n_b = sum(counts_a), sum(counts_b)

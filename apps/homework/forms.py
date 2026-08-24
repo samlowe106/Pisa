@@ -1,3 +1,5 @@
+from typing import cast
+
 from django import forms
 from django.contrib.auth import get_user_model
 
@@ -24,11 +26,11 @@ class EmailRosterField(forms.CharField):
         attrs={"placeholder": "alice@example.com, bob@example.com"}
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         kwargs.setdefault("required", False)
         super().__init__(*args, **kwargs)
 
-    def clean(self, value):
+    def clean(self, value) -> list:
         raw = super().clean(value) or ""
         emails = [part.strip() for part in raw.split(",") if part.strip()]
         users, seen, unknown = [], set(), []
@@ -51,6 +53,9 @@ class EmailRosterField(forms.CharField):
 
 
 class CourseForm(forms.ModelForm):
+    """Create/edit a course: content fields plus email-roster fields for
+    instructors/TAs/students, which resolve to existing users on save."""
+
     field_order = [
         "title",
         "slug",
@@ -108,12 +113,15 @@ class CourseForm(forms.ModelForm):
             "grade_d_min": forms.NumberInput(attrs={"min": 0, "max": 100}),
         }
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.user = user
         self.presets = available_thumbnail_presets()
-        self.fields["thumbnail_preset"].choices = [("", "")] + [
-            (p["key"], p["label"]) for p in self.presets
+        # self.fields[name] is declared as the base Field type; cast to the concrete
+        # ChoiceField this form actually declares so .choices type-checks.
+        cast("forms.ChoiceField", self.fields["thumbnail_preset"]).choices = [
+            ("", ""),
+            *[(p["key"], p["label"]) for p in self.presets],
         ]
         if self.instance and self.instance.pk:
             self.fields["instructors"].initial = list(self.instance.instructors.all())
@@ -123,10 +131,10 @@ class CourseForm(forms.ModelForm):
         if not (user and user.is_staff):
             self.fields.pop("instructors", None)
 
-    def clean(self):
+    def clean(self) -> dict:
         cleaned = super().clean()
         # A user may hold only one role in a course.
-        role_of = {}
+        role_of: dict[int, str] = {}
         for role in ("instructors", "tas", "students"):
             for member in cleaned.get(role) or []:
                 if member.pk in role_of and role_of[member.pk] != role:
@@ -151,7 +159,7 @@ class CourseForm(forms.ModelForm):
             self.add_error(None, "Grade cutoffs must strictly descend: A > B > C > D.")
         return cleaned
 
-    def apply_rosters(self, course):
+    def apply_rosters(self, course) -> None:
         """Write the M2M rosters from cleaned data (instructors only when the field exists)."""
         if "instructors" in self.cleaned_data:
             course.instructors.set(self.cleaned_data["instructors"])
@@ -160,6 +168,8 @@ class CourseForm(forms.ModelForm):
 
 
 class AssignmentForm(forms.ModelForm):
+    """Create/edit an assignment: content fields plus which Lean source files it imports."""
+
     class Meta:
         model = Assignment
         fields = [
@@ -179,6 +189,8 @@ class AssignmentForm(forms.ModelForm):
 
 
 class LeanSourceFileForm(forms.ModelForm):
+    """Create/edit one reusable Lean source file in an instructor's library."""
+
     class Meta:
         model = LeanSourceFile
         fields = ["title", "slug", "content"]
@@ -188,6 +200,9 @@ class LeanSourceFileForm(forms.ModelForm):
 
 
 class ProblemForm(forms.ModelForm):
+    """Create/edit a problem, including per-problem overrides to the global Lean construct
+    blacklist and axiom backstop."""
+
     # Which blacklisted constructs to re-permit for this problem (stored on the JSONField).
     allowed_constructs = forms.MultipleChoiceField(
         required=False,
@@ -235,6 +250,8 @@ class ProblemForm(forms.ModelForm):
 
 
 class ProblemBlockForm(forms.ModelForm):
+    """Create/edit one content block (statement/hint/etc.) within a problem."""
+
     class Meta:
         model = ProblemBlock
         fields = ["block_type", "content", "order"]
@@ -252,7 +269,7 @@ class CourseRenewForm(forms.Form):
         max_length=60, required=False, help_text="e.g. Section 002"
     )
 
-    def clean(self):
+    def clean(self) -> dict:
         cleaned = super().clean()
         if not (cleaned.get("term") or cleaned.get("section")):
             raise forms.ValidationError(

@@ -8,7 +8,7 @@ register = template.Library()
 
 
 @register.simple_tag
-def thumbnail_preset(key):
+def thumbnail_preset(key: str) -> dict:
     """URL + attribution sidecar for a preset image:
     ``{% thumbnail_preset "mitosis.jpg" as banner %}`` yields ``banner.url`` /
     ``banner.attribution`` (see ``apps.homework.thumbnails.thumbnail_preset``)."""

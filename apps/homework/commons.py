@@ -260,6 +260,9 @@ def build_attribution(
 
 @dataclass
 class ImageInfo:
+    """A Commons file's original dimensions and attribution metadata, as returned by
+    ``fetch_image_info``."""
+
     title: str  # canonical "File:..." title as the API returned it
     url: str  # original file URL
     width: int  # original pixel width
@@ -270,6 +273,7 @@ class ImageInfo:
 
 
 def _http_get(url: str) -> bytes:
+    """GET ``url`` and return the raw response body. Refuses anything but https."""
     if not url.startswith("https://"):
         # Enforced, not just assumed: `url` here can come from a Commons API response
         # (fetch_image_info / pick_download_url), not only our own hardcoded API_URL.
@@ -283,11 +287,13 @@ def _http_get(url: str) -> bytes:
 
 
 def _api_get(params: dict[str, str]) -> dict:
+    """GET the Commons MediaWiki API with ``params`` and return the parsed JSON response."""
     query = urllib.parse.urlencode({**params, "format": "json"})
     return json.loads(_http_get(f"{API_URL}?{query}"))
 
 
 def _single_page(data: dict) -> dict:
+    """The one page in a MediaWiki ``action=query`` response, or raise if it's missing."""
     pages = data.get("query", {}).get("pages", {})
     page = next(iter(pages.values()), None)
     if page is None or "missing" in page or "imageinfo" not in page:

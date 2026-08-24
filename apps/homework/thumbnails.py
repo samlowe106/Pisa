@@ -21,7 +21,7 @@ THUMBNAIL_PRESET_DIR = "homework/img/thumbnails"
 THUMBNAIL_EXTENSIONS = {".jpg", ".jpeg", ".png", ".svg", ".webp", ".gif"}
 
 
-def _thumbnail_preset_attribution(key):
+def _thumbnail_preset_attribution(key: str) -> dict[str, str]:
     """Attribution for a preset image, read from its ``<stem>.json`` sidecar (``{}`` if none).
 
     The sidecar may contain any of: title, author, author_url, license, license_url, source_url.
@@ -37,7 +37,7 @@ def _thumbnail_preset_attribution(key):
     return {}
 
 
-def thumbnail_preset(key):
+def thumbnail_preset(key: str) -> dict:
     """URL + attribution for one preset image by filename, for pages that use a specific
     preset directly (e.g. the login banner). The URL is built whether or not the file has
     been fetched yet; the attribution is ``{}`` until its sidecar exists."""
@@ -48,7 +48,7 @@ def thumbnail_preset(key):
     }
 
 
-def available_thumbnail_presets():
+def available_thumbnail_presets() -> list[dict]:
     """Preset thumbnails the site provides. Drop image files into
     ``static/homework/img/thumbnails/`` and they appear here automatically (keyed by filename);
     an optional ``<name>.json`` sidecar next to each image carries its attribution.

@@ -2,7 +2,7 @@ from .models import Course
 from .selectors import is_student_anywhere
 
 
-def roles(request):
+def roles(request) -> dict[str, bool]:
     """Per-request role flags for templates (nav, buttons).
 
     - ``is_site_admin``: Django staff flag; runs the whole site, creates courses.

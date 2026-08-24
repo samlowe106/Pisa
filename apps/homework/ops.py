@@ -1,12 +1,25 @@
 """Course-level operations that span multiple models: renewing (cloning) a course into a new
 term/section and walking a course's renewal lineage."""
 
+from typing import TypedDict
+
 from django.utils.text import slugify
 
 from .models import Assignment, Course, Problem, ProblemBlock
 
 
-def _unique_course_slug(*parts):
+class LineageNode(TypedDict):
+    """One node of the tree ``course_lineage_tree`` returns."""
+
+    course: Course
+    depth: int  # generations from the tree's root
+    children: list[LineageNode]
+
+
+# region Course renewal
+
+
+def _unique_course_slug(*parts: str) -> str:
     """A unique course slug from the given parts (title/term/section), with a numeric suffix
     on collision."""
     base = slugify(" ".join(part for part in parts if part)) or "course"
@@ -18,7 +31,55 @@ def _unique_course_slug(*parts):
     return slug
 
 
-def renew_course(course, *, term, section, created_by):
+def _clone_problem(problem, new_assignment) -> Problem:
+    """Deep-copy one problem, its allowed-construct/axiom config, and its blocks into
+    ``new_assignment``."""
+    new_problem = Problem.objects.create(
+        assignment=new_assignment,
+        title=problem.title,
+        statement=problem.statement,
+        required_code=problem.required_code,
+        grading_stub=problem.grading_stub,
+        order=problem.order,
+        points=problem.points,
+        allowed_constructs=list(problem.allowed_constructs or []),
+        axiom_target=problem.axiom_target,
+        allowed_axioms=problem.allowed_axioms,
+    )
+    new_problem.visible_source_files.set(problem.visible_source_files.all())
+    ProblemBlock.objects.bulk_create(
+        [
+            ProblemBlock(
+                problem=new_problem,
+                block_type=block.block_type,
+                content=block.content,
+                order=block.order,
+            )
+            for block in problem.blocks.all()
+        ]
+    )
+    return new_problem
+
+
+def _clone_assignment(assignment, new_course, created_by) -> Assignment:
+    """Deep-copy one assignment and its problems into ``new_course``, clearing its due date
+    (the new term sets its own)."""
+    new_assignment = Assignment.objects.create(
+        course=new_course,
+        title=assignment.title,
+        slug=assignment.slug,  # unique per course; the new course is empty
+        description=assignment.description,
+        created_by=created_by,
+        is_published=assignment.is_published,
+        due_date=None,  # new term: instructor sets fresh due dates
+    )
+    new_assignment.source_files.set(assignment.source_files.all())
+    for problem in assignment.problems.all():
+        _clone_problem(problem, new_assignment)
+    return new_assignment
+
+
+def renew_course(course, *, term, section, created_by) -> Course:
     """Deep-copy ``course`` into a new offering for ``term``/``section``: its assignments,
     problems, and blocks, re-linking the shared Lean source files. Carries over course settings
     and staff (instructors + TAs) but NOT students or submissions, and clears due dates. Records
@@ -44,47 +105,17 @@ def renew_course(course, *, term, section, created_by):
     new_course.tas.set(course.tas.all())
 
     for assignment in course.assignments.all():
-        new_assignment = Assignment.objects.create(
-            course=new_course,
-            title=assignment.title,
-            slug=assignment.slug,  # unique per course; the new course is empty
-            description=assignment.description,
-            created_by=created_by,
-            is_published=assignment.is_published,
-            due_date=None,  # new term: instructor sets fresh due dates
-        )
-        new_assignment.source_files.set(assignment.source_files.all())
-
-        for problem in assignment.problems.all():
-            new_problem = Problem.objects.create(
-                assignment=new_assignment,
-                title=problem.title,
-                statement=problem.statement,
-                required_code=problem.required_code,
-                grading_stub=problem.grading_stub,
-                order=problem.order,
-                points=problem.points,
-                allowed_constructs=list(problem.allowed_constructs or []),
-                axiom_target=problem.axiom_target,
-                allowed_axioms=problem.allowed_axioms,
-            )
-            new_problem.visible_source_files.set(problem.visible_source_files.all())
-            ProblemBlock.objects.bulk_create(
-                [
-                    ProblemBlock(
-                        problem=new_problem,
-                        block_type=block.block_type,
-                        content=block.content,
-                        order=block.order,
-                    )
-                    for block in problem.blocks.all()
-                ]
-            )
+        _clone_assignment(assignment, new_course, created_by)
 
     return new_course
 
 
-def course_family(course):
+# endregion
+
+# region Renewal lineage
+
+
+def course_family(course) -> list[Course]:
     """Every offering (section) in ``course``'s renew lineage: the root of the chain and all
     of its descendants, oldest first. A standalone course is a family of one."""
     root = course
@@ -106,17 +137,14 @@ def course_family(course):
     return family
 
 
-def course_lineage_tree(course):
+def course_lineage_tree(course) -> LineageNode | None:
     """``course``'s renewal lineage as a nested tree rooted at the earliest offering, or
-    ``None`` for a standalone course (nothing to draw). Each node is
-    ``{"course": Course, "depth": int, "children": [node, ...]}``, ``depth`` counting
-    generations from the root.
-    """
+    ``None`` for a standalone course (nothing to draw)."""
     family = course_family(course)
     if len(family) < 2:
         return None
 
-    nodes = {
+    nodes: dict[int, LineageNode] = {
         offering.pk: {"course": offering, "depth": 0, "children": []}
         for offering in family
     }
@@ -132,3 +160,6 @@ def course_lineage_tree(course):
         else:
             root = node
     return root
+
+
+# endregion

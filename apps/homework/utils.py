@@ -1,3 +1,3 @@
-def display_name(user):
+def display_name(user) -> str:
     """A user's full name, falling back to their username."""
     return user.get_full_name() or user.username

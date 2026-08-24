@@ -58,7 +58,84 @@ def _lean_holder_key(user_id: int) -> str:
 
 
 class LeanLSPConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
+    async def _claim_or_reject_busy(self, key: str) -> bool:
+        """Non-takeover path: atomically claim the slot, or reject as busy if another window
+        already holds it. ``cache.aadd`` is a set-if-absent (Redis SETNX under the real
+        backend), so the busy check and the claim are the same atomic operation: no race
+        window for two concurrent connects to both slip through, even across worker
+        processes. Returns whether this connection claimed the slot."""
+        if not await cache.aadd(key, self.channel_name, timeout=settings.LEAN_CAP_TTL):
+            await self.accept()
+            await self._send_status(
+                "busy", "A Pisa Lean instance is open in another window."
+            )
+            await self.close(code=WS_CLOSE_BUSY)
+            return False
+        self.has_claim = True
+        # Refresh the claim's TTL while the connection is open, so a crashed worker's holder
+        # expires instead of leaking a permanently "busy" slot (see LEAN_CAP_TTL).
+        self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        return True
+
+    def _resolve_lsp_cmd(self) -> list[str] | None:
+        """LEAN_LSP_CMD from settings, split into argv if given as a string; ``None`` if
+        unset."""
+        cmd = getattr(settings, "LEAN_LSP_CMD", None)
+        if isinstance(cmd, str):
+            cmd = shlex.split(cmd)
+        return cmd or None
+
+    async def _commit_takeover(self, key: str) -> bool:
+        """Claim the slot for a ``?takeover=1`` connection, evicting whoever holds it now
+        that we know this connection will actually proceed (deferred this far so a takeover
+        that then fails a later check never stomps a real holder's slot). ``aset``
+        unconditionally wins the slot (last write takes it); broadcasting the evict before
+        joining the group means we never evict ourselves, and any holder already in the
+        group (the real previous holder, or a competing takeover that joined first) gets it
+        directly. A second, concurrent takeover that joins the group *after* this broadcast
+        would miss it, so the recheck right after group_add catches that case too:
+        whichever takeover's ``aset`` happened last is the only one whose recheck still
+        finds itself the holder, so it's the only one left standing. Returns whether this
+        connection still holds the slot."""
+        await cache.aset(key, self.channel_name, timeout=settings.LEAN_CAP_TTL)
+        self.has_claim = True
+        self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        await self.channel_layer.group_send(self.user_group, {"type": "lean.evict"})
+        await self.channel_layer.group_add(self.user_group, self.channel_name)
+        if await cache.aget(key) != self.channel_name:
+            self._evicted = True
+            await self._release_claim()
+            await self.accept()
+            await self._send_status("taken_over", "Lean is now open in another window.")
+            await self.close(code=WS_CLOSE_TAKEN_OVER)
+            return False
+        return True
+
+    async def _start_lean_process(self, cmd: list[str]) -> bool:
+        """Launch the Lean LSP subprocess. On failure, sends an error status and closes;
+        returns whether the connection should proceed."""
+        try:
+            self.process = await asyncio.create_subprocess_exec(
+                *sandbox.wrap_argv(cmd, workdir=self.tmpdir),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self.tmpdir,
+                # Long-lived server: strip secrets + isolate, but no CPU-time cap.
+                **sandbox.popen_kwargs(cpu_seconds=None),
+            )
+        except (FileNotFoundError, PermissionError, OSError):
+            await self._release_claim()
+            self._cleanup_tmp()
+            await self.accept()
+            await self._send_status(
+                "error", "Lean language server could not be started."
+            )
+            await self.close(code=4003)
+            return False
+        return True
+
+    async def connect(self) -> None:
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
             await self.close(code=4401)  # unauthenticated
@@ -72,30 +149,13 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
 
         # One live Lean instance per user. A passive connection while another is already live is
         # rejected as busy up front; the client greys the editor and offers "Use Lean here",
-        # which reconnects with ?takeover=1. ``cache.aadd`` is an atomic set-if-absent (Redis
-        # SETNX under the real backend), so the non-takeover busy check and the claim are the
-        # same operation: no race window for two concurrent connects to both slip through, even
-        # across worker processes.
-        #
-        # Takeover claims the slot further down (see the `takeover:` block below), only once
-        # we know this connection will actually proceed: claiming here, before the
-        # permission/support/config checks that follow, would stomp the real holder's cache
-        # entry even if this takeover then failed one of those checks, leaving that holder
-        # disconnected from its own slot while still believing it holds it.
-        if not takeover:
-            if not await cache.aadd(
-                key, self.channel_name, timeout=settings.LEAN_CAP_TTL
-            ):
-                await self.accept()
-                await self._send_status(
-                    "busy", "A Pisa Lean instance is open in another window."
-                )
-                await self.close(code=WS_CLOSE_BUSY)
-                return
-            self.has_claim = True
-            # Refresh the claim's TTL while the connection is open, so a crashed worker's holder
-            # expires instead of leaking a permanently "busy" slot (see LEAN_CAP_TTL).
-            self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        # which reconnects with ?takeover=1. Takeover claims the slot further down (see
+        # _commit_takeover), only once we know this connection will actually proceed: claiming
+        # here, before the permission/support/config checks that follow, would stomp the real
+        # holder's cache entry even if this takeover then failed one of those checks, leaving
+        # that holder disconnected from its own slot while still believing it holds it.
+        if not takeover and not await self._claim_or_reject_busy(key):
+            return
 
         self.problem_pk = self.scope["url_route"]["kwargs"]["problem_pk"]
         context = await self._load_context(self.problem_pk, user)
@@ -122,10 +182,8 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
             self.tmpdir, f"pisa_problem_{self.problem_pk}.lean"
         ).as_uri()
 
-        cmd = getattr(settings, "LEAN_LSP_CMD", None)
-        if isinstance(cmd, str):
-            cmd = shlex.split(cmd)
-        if not cmd:
+        cmd = self._resolve_lsp_cmd()
+        if cmd is None:
             await self._release_claim()
             await self.accept()
             await self._send_status(
@@ -135,49 +193,12 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
             return
 
         if takeover:
-            # Commit the takeover now that we know it will actually proceed. ``aset``
-            # unconditionally wins the slot (last write takes it); broadcasting the evict
-            # before joining the group means we never evict ourselves, and any holder already
-            # in the group (the real previous holder, or a competing takeover that joined
-            # first) gets it directly. A second, concurrent takeover that joins the group
-            # *after* this broadcast would miss it, so the recheck right after group_add
-            # catches that case too: whichever takeover's `aset` happened last is the only one
-            # whose recheck still finds itself the holder, so it's the only one left standing.
-            await cache.aset(key, self.channel_name, timeout=settings.LEAN_CAP_TTL)
-            self.has_claim = True
-            self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-            await self.channel_layer.group_send(self.user_group, {"type": "lean.evict"})
-            await self.channel_layer.group_add(self.user_group, self.channel_name)
-            if await cache.aget(key) != self.channel_name:
-                self._evicted = True
-                await self._release_claim()
-                await self.accept()
-                await self._send_status(
-                    "taken_over", "Lean is now open in another window."
-                )
-                await self.close(code=WS_CLOSE_TAKEN_OVER)
+            if not await self._commit_takeover(key):
                 return
         else:
             await self.channel_layer.group_add(self.user_group, self.channel_name)
 
-        try:
-            self.process = await asyncio.create_subprocess_exec(
-                *sandbox.wrap_argv(cmd, workdir=self.tmpdir),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=self.tmpdir,
-                # Long-lived server: strip secrets + isolate, but no CPU-time cap.
-                **sandbox.popen_kwargs(cpu_seconds=None),
-            )
-        except (FileNotFoundError, PermissionError, OSError):
-            await self._release_claim()
-            self._cleanup_tmp()
-            await self.accept()
-            await self._send_status(
-                "error", "Lean language server could not be started."
-            )
-            await self.close(code=4003)
+        if not await self._start_lean_process(cmd):
             return
 
         self.reader_task = asyncio.create_task(self._read_from_lean())
@@ -185,7 +206,7 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     # close_code is part of Channels' fixed disconnect() override signature.
-    async def disconnect(self, close_code):  # noqa: ARG002
+    async def disconnect(self, close_code) -> None:  # noqa: ARG002
         await self._release_claim()
         for task in (
             getattr(self, "reader_task", None),
@@ -200,7 +221,7 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
         self._cleanup_tmp()
 
     # event is part of the channel-layer event-handler signature (see the group_send above).
-    async def lean_evict(self, event):  # noqa: ARG002
+    async def lean_evict(self, event) -> None:  # noqa: ARG002
         """Another window of the same user claimed the Lean slot via "Use Lean here".
 
         Two takeovers racing each other can each broadcast an evict, so a given connection may
@@ -218,7 +239,7 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
         await self._send_status("taken_over", "Lean is now open in another window.")
         await self.close(code=WS_CLOSE_TAKEN_OVER)
 
-    async def _heartbeat_loop(self):
+    async def _heartbeat_loop(self) -> None:
         """Refresh the claim's TTL while we still hold it; stop refreshing (and let it expire)
         once we don't, e.g. after a takeover reassigned it to another connection."""
         key = _lean_holder_key(self.user_id)
@@ -229,7 +250,7 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
                 return
             await cache.atouch(key, timeout=settings.LEAN_CAP_TTL)
 
-    async def _release_claim(self):
+    async def _release_claim(self) -> None:
         """Give up this user's Lean slot, but only if we still hold it (a takeover may have
         reassigned it to another connection already)."""
         if not getattr(self, "has_claim", False):
@@ -244,7 +265,7 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_discard(self.user_group, self.channel_name)
 
     # bytes_data is part of Channels' fixed receive() signature; this consumer is text-only.
-    async def receive(self, text_data=None, bytes_data=None):  # noqa: ARG002
+    async def receive(self, text_data=None, bytes_data=None) -> None:  # noqa: ARG002
         proc = getattr(self, "process", None)
         if not proc or proc.stdin is None or not text_data:
             return
@@ -303,7 +324,7 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
 
     # -- Lean -> browser ------------------------------------------------------------------
 
-    async def _read_from_lean(self):
+    async def _read_from_lean(self) -> None:
         reader = self.process.stdout
         try:
             while True:
@@ -336,7 +357,7 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
         except Exception:
             logger.warning("Lean stdout reader ended unexpectedly", exc_info=True)
 
-    async def _drain_stderr(self):
+    async def _drain_stderr(self) -> None:
         reader = self.process.stderr
         try:
             while await reader.readline():
@@ -348,18 +369,21 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
 
     # -- helpers --------------------------------------------------------------------------
 
-    async def _send_status(self, status: str, reason: str):
+    async def _send_status(self, status: str, reason: str) -> None:
         await self.send(
             text_data=json.dumps({"pisa": {"status": status, "reason": reason}})
         )
 
-    def _cleanup_tmp(self):
+    def _cleanup_tmp(self) -> None:
         tmpdir = getattr(self, "tmpdir", None)
         if tmpdir:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     @database_sync_to_async
-    def _load_context(self, problem_pk, user):
+    def _load_context(self, problem_pk: int, user) -> dict | None:
+        """The assembled document's fixed prefix/suffix for ``problem_pk``, or ``None`` if
+        ``user`` may not view it, or ``{"unsupported": True}`` if the problem doesn't have
+        exactly one editable block (live feedback only supports that shape)."""
         try:
             problem = Problem.objects.select_related(
                 "assignment", "assignment__course"

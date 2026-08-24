@@ -116,7 +116,7 @@ _AXIOMS_RE = re.compile(r"depends on axioms:\s*\[([^\]]*)\]")
 _NO_AXIOMS_RE = re.compile(r"does not depend on any axioms")
 
 
-def parse_axioms(lean_output: str):
+def parse_axioms(lean_output: str) -> frozenset | None:
     """The set of axioms a ``#print axioms <decl>`` reported in ``lean_output``, or ``None`` if
     no such report is present (e.g. the declaration didn't exist)."""
     match = _AXIOMS_RE.search(lean_output)
@@ -129,7 +129,9 @@ def parse_axioms(lean_output: str):
     return None
 
 
-def forbidden_axioms(lean_output: str, *, allowed=frozenset()):
+def forbidden_axioms(
+    lean_output: str, *, allowed: frozenset = frozenset()
+) -> frozenset | None:
     """Axioms the proof depends on that aren't allowed, i.e. outside Lean's standard sound
     axioms plus the problem's ``allowed`` set. ``sorryAx`` (left by ``sorry``/``admit``) is
     never standard, so it always shows up here. Returns ``None`` if there was no axiom report

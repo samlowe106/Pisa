@@ -7,7 +7,7 @@ courses search, the active/previous split, and the live Lean editor. Idempotent:
 tops up anything missing rather than duplicating.
 """
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
@@ -20,6 +20,13 @@ from apps.homework.models import (
     ProblemBlock,
     Submission,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    # No custom AUTH_USER_MODEL is configured, so this is the concrete type `get_user_model()`
+    # resolves to at runtime; aliased to avoid shadowing the `User` variable below.
+    from django.contrib.auth.models import User as AuthUser
 
 User = get_user_model()
 
@@ -95,7 +102,7 @@ class Command(BaseCommand):
 
     # Django's BaseCommand.execute() always passes the parser's common options
     # (verbosity, traceback, etc.) as keyword arguments; this command ignores all of them.
-    def handle(self, **options):  # noqa: ARG002
+    def handle(self, **options) -> None:  # noqa: ARG002
         # region Users (all share the password "password")
         teacher = self._user("teacher", is_staff=True)  # site admin
         instructor = self._user("instructor")  # course instructor, not an admin
@@ -202,7 +209,7 @@ class Command(BaseCommand):
 
     # -- helpers --------------------------------------------------------------------------
 
-    def _user(self, username, *, is_staff=False):
+    def _user(self, username: str, *, is_staff: bool = False) -> AuthUser:
         user, created = User.objects.get_or_create(
             username=username,
             defaults={"email": f"{username}@example.com", "is_staff": is_staff},
@@ -212,7 +219,9 @@ class Command(BaseCommand):
             user.save()
         return user
 
-    def _source_file(self, slug, title, content, owner):
+    def _source_file(
+        self, slug: str, title: str, content: str, owner: AuthUser
+    ) -> LeanSourceFile:
         source_file, _ = LeanSourceFile.objects.get_or_create(
             slug=slug,
             defaults={"title": title, "content": content, "created_by": owner},
@@ -221,18 +230,18 @@ class Command(BaseCommand):
 
     def _course(
         self,
-        slug,
-        title,
-        description,
+        slug: str,
+        title: str,
+        description: str,
         *,
-        instructors=(),
-        tas=(),
-        students=(),
-        scoring=Course.SCORING_BEST,
-        thumbnail_preset="",
-        is_active=True,
-        grade_bands=None,
-    ):
+        instructors: Sequence[AuthUser] = (),
+        tas: Sequence[AuthUser] = (),
+        students: Sequence[AuthUser] = (),
+        scoring: str = Course.SCORING_BEST,
+        thumbnail_preset: str = "",
+        is_active: bool = True,
+        grade_bands: tuple[int, int, int, int] | None = None,
+    ) -> Course:
         defaults = {
             "title": title,
             "description": description,
@@ -249,7 +258,16 @@ class Command(BaseCommand):
         course.students.add(*students)
         return course
 
-    def _assignment(self, course, slug, title, owner, *, published, source_files=()):
+    def _assignment(
+        self,
+        course: Course,
+        slug: str,
+        title: str,
+        owner: AuthUser,
+        *,
+        published: bool,
+        source_files: Sequence[LeanSourceFile] = (),
+    ) -> Assignment:
         assignment, _ = Assignment.objects.get_or_create(
             course=course,
             slug=slug,
@@ -264,7 +282,9 @@ class Command(BaseCommand):
             assignment.source_files.add(*source_files)
         return assignment
 
-    def _simple_problem(self, assignment, title, order, code):
+    def _simple_problem(
+        self, assignment: Assignment, title: str, order: int, code: str
+    ) -> Problem:
         """A minimal single-editable-block problem (enough to render the editor and grade)."""
         problem, _ = Problem.objects.get_or_create(
             assignment=assignment,
@@ -286,7 +306,12 @@ class Command(BaseCommand):
             )
         return problem
 
-    def _mynat_problem(self, assignment, definition_file, addition_file):
+    def _mynat_problem(
+        self,
+        assignment: Assignment,
+        definition_file: LeanSourceFile,
+        addition_file: LeanSourceFile,
+    ) -> Problem:
         """The rich MyNat problem used to demo live Lean feedback (prefix/fixed/editable)."""
         problem, _ = Problem.objects.get_or_create(
             assignment=assignment,
@@ -327,7 +352,7 @@ class Command(BaseCommand):
         Submission.STATUS_ERROR: "Lean execution timed out.",
     }
 
-    def _submit(self, user, problem, status):
+    def _submit(self, user: AuthUser, problem: Problem, status: str) -> None:
         Submission.objects.get_or_create(
             user=user,
             problem=problem,

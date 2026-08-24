@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from .utils import display_name
 
 
-def export_submissions_csv(submissions):
+def export_submissions_csv(submissions) -> HttpResponse:
     """
     Generate CSV response from queryset of Submission objects.
 
@@ -48,7 +48,7 @@ def export_submissions_csv(submissions):
     return response
 
 
-def export_submissions_excel(submissions):
+def export_submissions_excel(submissions) -> HttpResponse:
     """
     Generate Excel response from queryset of Submission objects.
 

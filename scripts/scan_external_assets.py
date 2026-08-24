@@ -100,10 +100,10 @@ def _parse_attrs(attrs: str) -> dict[str, str]:
     return {m.group("name").lower(): m.group("value") for m in ATTR_RE.finditer(attrs)}
 
 
-def scan_text(rel_path: str, text: str) -> list[Finding]:
+def _scan_denylist(rel_path: str, text: str) -> list[Finding]:
+    """Denylist sweep across the whole file (catches inline JS, fetch(), etc.), not just
+    ``<script>``/``<link>`` tags."""
     findings: list[Finding] = []
-
-    # 1. Denylist sweep across the whole file (catches inline JS, fetch(), etc.).
     for m in URL_RE.finditer(text):
         host = _host_of(m.group("url"))
         if host and _host_matches(host, KNOWN_MALICIOUS_HOSTS):
@@ -116,8 +116,13 @@ def scan_text(rel_path: str, text: str) -> list[Finding]:
                     message=f"Reference to known-malicious CDN host '{host}'. Remove it immediately.",
                 )
             )
+    return findings
 
-    # 2 & 3. Asset tags: allowlist + SRI enforcement.
+
+def _scan_asset_tags(rel_path: str, text: str) -> list[Finding]:
+    """External ``<script src>``/``<link rel=stylesheet href>`` tags: allowlist + SRI
+    enforcement."""
+    findings: list[Finding] = []
     for m in TAG_RE.finditer(text):
         tag = m.group("tag").lower()
         attrs = _parse_attrs(m.group("attrs"))
@@ -157,8 +162,13 @@ def scan_text(rel_path: str, text: str) -> list[Finding]:
                     ),
                 )
             )
-
     return findings
+
+
+def scan_text(rel_path: str, text: str) -> list[Finding]:
+    """All findings for one file's text: known-malicious hosts, non-allowlisted external
+    asset hosts, and missing SRI on external asset tags."""
+    return _scan_denylist(rel_path, text) + _scan_asset_tags(rel_path, text)
 
 
 def iter_files(paths: list[str]) -> list[Path]:

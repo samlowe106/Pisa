@@ -10,7 +10,34 @@ import sys
 from pathlib import Path
 
 
-def find_lean_lsp():
+def _resolve_candidate(cmd_str: str) -> str | None:
+    """The executable path for ``cmd_str``'s command word, if it exists on disk (full path
+    candidates) or in PATH (bare command candidates), else ``None``."""
+    exe = cmd_str.split(maxsplit=1)[0]
+    if exe.startswith(("/", "~")):
+        exe_path = str(Path(exe).expanduser())
+        if Path(exe_path).is_file() and os.access(exe_path, os.X_OK):
+            return exe_path
+        return None
+    return shutil.which(exe)
+
+
+def _looks_like_lsp(exe_path: str) -> bool:
+    """Run ``exe_path --help`` and check the output for signs of LSP/server support."""
+    try:
+        result = subprocess.run(
+            [exe_path, "--help"], capture_output=True, text=True, timeout=5, check=False
+        )
+    except Exception as e:  # noqa: BLE001 - best-effort probe, reported and moved on
+        print(f"  Help check failed: {e}")
+        return False
+    if "--server" in result.stdout or "language" in result.stdout.lower():
+        print("  Looks like LSP support!")
+        return True
+    return False
+
+
+def find_lean_lsp() -> str | None:
     """Try to find Lean LSP in various locations."""
     candidates = [
         "lean --server",
@@ -31,52 +58,13 @@ def find_lean_lsp():
         print(f"elan check failed: {e}")
 
     for cmd_str in candidates:
-        parts = cmd_str.split()
-        exe = parts[0]
-
-        # Handle full paths
-        if exe.startswith(("/", "~")):
-            exe_to_check = str(Path(exe).expanduser())
-            if Path(exe_to_check).is_file() and os.access(exe_to_check, os.X_OK):
-                print(f"Found: {cmd_str}")
-                try:
-                    result = subprocess.run(
-                        [exe_to_check, "--help"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        check=False,
-                    )
-                    if (
-                        "--server" in result.stdout
-                        or "language" in result.stdout.lower()
-                    ):
-                        print("  Looks like LSP support!")
-                        return cmd_str
-                except Exception as e:  # noqa: BLE001
-                    print(f"  Help check failed: {e}")
-        else:
-            # Check in PATH
-            if shutil.which(exe):
-                print(f"Found: {cmd_str}")
-                try:
-                    result = subprocess.run(
-                        [exe, "--help"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        check=False,
-                    )
-                    if (
-                        "--server" in result.stdout
-                        or "language" in result.stdout.lower()
-                    ):
-                        print("  Looks like LSP support!")
-                        return cmd_str
-                except Exception as e:  # noqa: BLE001
-                    print(f"  Help check failed: {e}")
-            else:
-                print(f"Not found: {exe}")
+        exe_path = _resolve_candidate(cmd_str)
+        if exe_path is None:
+            print(f"Not found: {cmd_str.split()[0]}")
+            continue
+        print(f"Found: {cmd_str}")
+        if _looks_like_lsp(exe_path):
+            return cmd_str
 
     return None
 

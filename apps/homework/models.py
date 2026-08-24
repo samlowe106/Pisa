@@ -21,12 +21,12 @@ RESERVED_ASSIGNMENT_SLUGS = {
 }
 
 
-def validate_course_slug(value):
+def validate_course_slug(value: str) -> None:
     if value in RESERVED_COURSE_SLUGS:
         raise ValidationError(f"'{value}' is a reserved slug; please choose another.")
 
 
-def validate_assignment_slug(value):
+def validate_assignment_slug(value: str) -> None:
     if value in RESERVED_ASSIGNMENT_SLUGS:
         raise ValidationError(f"'{value}' is a reserved slug; please choose another.")
 
@@ -91,20 +91,20 @@ class Course(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title
 
-    def get_absolute_url(self):
+    def get_absolute_url(self) -> str:
         return reverse("homework:course_detail", kwargs={"slug": self.slug})
 
     @property
-    def display_name(self):
+    def display_name(self) -> str:
         """Title qualified by term/section, e.g. “Intro to Lean (Summer 2026 · Section 2)”."""
         qualifier = " · ".join(part for part in (self.term, self.section) if part)
         return f"{self.title} ({qualifier})" if qualifier else self.title
 
     @property
-    def thumbnail_url(self):
+    def thumbnail_url(self) -> str:
         """The course thumbnail URL: an uploaded image wins, else a chosen preset, else ''."""
         if self.thumbnail:
             return self.thumbnail.url
@@ -113,13 +113,13 @@ class Course(models.Model):
         return ""
 
     @property
-    def thumbnail_credit(self):
+    def thumbnail_credit(self) -> dict | None:
         """Attribution dict for the chosen preset thumbnail; None for uploads or no preset."""
         if self.thumbnail or not self.thumbnail_preset:
             return None
         return _thumbnail_preset_attribution(self.thumbnail_preset) or None
 
-    def grade_bands(self):
+    def grade_bands(self) -> list[tuple[int, str, str]]:
         """(minimum %, letter, css class) bands, highest first; F is below the D cutoff."""
         return [
             (self.grade_a_min, "A", "grade-a"),
@@ -128,7 +128,7 @@ class Course(models.Model):
             (self.grade_d_min, "D", "grade-d"),
         ]
 
-    def letter_for(self, percent):
+    def letter_for(self, percent: float) -> tuple[str, str]:
         """The (letter, css class) for a percentage under this course's grade bands."""
         for threshold, letter, css_class in self.grade_bands():
             if percent >= threshold:
@@ -139,21 +139,21 @@ class Course(models.Model):
     # Site admins (user.is_staff) outrank everyone in every course;
     # capability is hierarchical: admin ⊇ instructor ⊇ TA ⊇ student.
 
-    def is_instructor(self, user):
+    def is_instructor(self, user) -> bool:
         """Edit access: a site admin or one of this course's instructors. Instructors can
         edit content, export grades, and manage TAs/students."""
         return bool(user.is_staff) or self.instructors.filter(pk=user.pk).exists()
 
-    def is_course_staff(self, user):
+    def is_course_staff(self, user) -> bool:
         """Staff-side *view* access (grades, drafts, all source files): admin, instructor,
         or TA. TAs get this but cannot edit or export."""
         return self.is_instructor(user) or self.tas.filter(pk=user.pk).exists()
 
-    def can_manage_instructors(self, user):
+    def can_manage_instructors(self, user) -> bool:
         """Only site admins add or remove instructors."""
         return bool(user.is_staff)
 
-    def role_of(self, user):
+    def role_of(self, user) -> str | None:
         """The user's effective role label, or None: for display only."""
         if user.is_staff:
             return "admin"
@@ -194,10 +194,10 @@ class Assignment(models.Model):
         ordering = ["-created_at"]
         unique_together = ["course", "slug"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.course.title}: {self.title}"
 
-    def get_absolute_url(self):
+    def get_absolute_url(self) -> str:
         return reverse(
             "homework:assignment_detail",
             kwargs={"course_slug": self.course.slug, "assignment_slug": self.slug},
@@ -218,7 +218,7 @@ class LeanSourceFile(models.Model):
     class Meta:
         ordering = ["title"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title
 
 
@@ -287,10 +287,10 @@ class Problem(models.Model):
     class Meta:
         ordering = ["order", "created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.assignment.title}: {self.display_name}"
 
-    def get_absolute_url(self):
+    def get_absolute_url(self) -> str:
         return reverse(
             "homework:problem_detail",
             kwargs={
@@ -301,7 +301,7 @@ class Problem(models.Model):
         )
 
     @property
-    def position(self):
+    def position(self) -> int:
         """1-based index of this problem within its assignment (the URL number).
 
         Iterates the related manager (rather than ``values_list``) so a caller that
@@ -313,7 +313,7 @@ class Problem(models.Model):
         return 1
 
     @property
-    def display_name(self):
+    def display_name(self) -> str:
         """Human-facing name: the optional title, else a lazy "Problem N" by position.
 
         Resolved on access rather than stored, so it never goes stale when problems are
@@ -351,7 +351,7 @@ class ProblemBlock(models.Model):
         ordering = ["order"]
         unique_together = ["problem", "order"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.problem.title} - {self.get_block_type_display()} (#{self.order})"
 
 
@@ -382,14 +382,14 @@ class Submission(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             f"Submission {self.pk} for {self.problem.display_name} "
             f"by {self.user.username}"
         )
 
     @property
-    def is_late(self):
+    def is_late(self) -> bool:
         """Submitted after the assignment's due date (if one is set)."""
         due = self.problem.assignment.due_date
         return bool(due and self.created_at and self.created_at > due)

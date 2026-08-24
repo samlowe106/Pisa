@@ -1,9 +1,19 @@
 import json
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.forms import inlineformset_factory
-from django.http import Http404, HttpResponseBadRequest, JsonResponse
+
+# HttpResponseBase: View.as_view() reads cls.dispatch.__annotations__ at class-definition
+# time, forcing PEP 649's deferred evaluation to resolve dispatch()'s return annotation
+# immediately, so it must be a real import here, not TYPE_CHECKING-only (see assignments.py).
+from django.http import (
+    Http404,
+    HttpResponseBadRequest,
+    HttpResponseBase,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -34,6 +44,10 @@ from ..models import (
 from ..selectors import accessible_problems, editable_courses, editable_problems
 from .mixins import FormsetMixin, ResolvedObjectMixin
 
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+    from django.http import HttpResponse
+
 ProblemFormSet = inlineformset_factory(
     Assignment,
     Problem,
@@ -60,7 +74,7 @@ ProblemBlockFormSet = inlineformset_factory(
 )
 
 
-def _problem_by_number(problem_queryset, kwargs):
+def _problem_by_number(problem_queryset, kwargs) -> Problem:
     """Resolve a problem from nested URL kwargs (course_slug, assignment_slug, number).
 
     The URL number is the problem's 1-based position within its assignment; the queryset
@@ -116,13 +130,15 @@ def build_problem_pager(number: int, total: int) -> dict | None:
 
 
 class ProblemCreateView(LoginRequiredMixin, FormsetMixin, CreateView):
+    """Add a problem (with its content-block formset) to an assignment the user instructs."""
+
     model = Problem
     form_class = ProblemForm
     template_name = "homework/problem_form.html"
     formset_class = ProblemBlockFormSet
     formset_context_name = "block_formset"
 
-    def dispatch(self, request, *args, **kwargs):
+    def dispatch(self, request, *args, **kwargs) -> HttpResponseBase:
         self.assignment = get_object_or_404(
             Assignment,
             course__slug=kwargs["course_slug"],
@@ -131,29 +147,31 @@ class ProblemCreateView(LoginRequiredMixin, FormsetMixin, CreateView):
         )
         return super().dispatch(request, *args, **kwargs)
 
-    def get_form(self, form_class=None):
+    def get_form(self, form_class=None) -> ProblemForm:
         form = super().get_form(form_class)
         form.fields["visible_source_files"].queryset = (
             self.assignment.source_files.all()
         )
         return form
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         context["assignment"] = self.assignment
         return context
 
-    def form_valid(self, form):
+    def form_valid(self, form) -> HttpResponse:
         form.instance.assignment = self.assignment
         return super().form_valid(form)
 
-    def get_success_url(self):
+    def get_success_url(self) -> str:
         return self.object.get_absolute_url()
 
 
 class ProblemUpdateView(
     LoginRequiredMixin, FormsetMixin, ResolvedObjectMixin, UpdateView
 ):
+    """Edit a problem (and its content-block formset) in an assignment the user instructs."""
+
     model = Problem
     form_class = ProblemForm
     template_name = "homework/problem_form.html"
@@ -161,37 +179,40 @@ class ProblemUpdateView(
     formset_context_name = "block_formset"
     object_resolver = staticmethod(_problem_by_number)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         return editable_problems(self.request.user)
 
-    def get_form(self, form_class=None):
+    def get_form(self, form_class=None) -> ProblemForm:
         form = super().get_form(form_class)
         form.fields["visible_source_files"].queryset = (
             self.object.assignment.source_files.all()
         )
         return form
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         context["assignment"] = self.object.assignment
         return context
 
-    def get_success_url(self):
+    def get_success_url(self) -> str:
         return self.object.get_absolute_url()
 
 
 class ProblemDetailView(LoginRequiredMixin, ResolvedObjectMixin, DetailView):
+    """A problem's statement, editor, imported source files, and the viewer's own submission
+    history for it."""
+
     model = Problem
     template_name = "homework/problem_detail.html"
     context_object_name = "problem"
     object_resolver = staticmethod(_problem_by_number)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         return accessible_problems(self.request.user).select_related(
             "assignment", "assignment__course"
         )
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         context["number"] = self.kwargs["number"]
         context["can_edit"] = self.object.assignment.course.is_instructor(
@@ -229,7 +250,9 @@ class ProblemDetailView(LoginRequiredMixin, ResolvedObjectMixin, DetailView):
 
 @method_decorator([login_required, require_POST], name="dispatch")
 class ProblemRunView(View):
-    def post(self, request, pk):
+    """Run a problem's Lean code without recording a submission ("Run" button)."""
+
+    def post(self, request, pk: int) -> HttpResponse:
         problem = get_object_or_404(accessible_problems(request.user), pk=pk)
         submission_code, _student_code, error = assemble_lean_submission_source(
             problem, request.POST
@@ -278,7 +301,9 @@ class ProblemRunView(View):
 
 @method_decorator([login_required, require_POST], name="dispatch")
 class ProblemSubmitView(View):
-    def post(self, request, pk):
+    """Grade a problem's Lean code and record the graded submission ("Submit" button)."""
+
+    def post(self, request, pk: int) -> HttpResponse:
         problem = get_object_or_404(accessible_problems(request.user), pk=pk)
         submission_code, student_code, error = assemble_lean_submission_source(
             problem, request.POST
@@ -326,7 +351,7 @@ class ProblemReorderView(View):
     requester's taught courses keeps non-instructors out.
     """
 
-    def post(self, request, course_slug, assignment_slug):
+    def post(self, request, course_slug: str, assignment_slug: str) -> HttpResponse:
         assignment = get_object_or_404(
             Assignment,
             course__slug=course_slug,

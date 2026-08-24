@@ -13,6 +13,10 @@ if TYPE_CHECKING:
 class StaffRequiredMixin(UserPassesTestMixin):
     """Restrict a view to site admins (Django staff), e.g. creating courses."""
 
+    # No return/request annotations here: django-stubs types HttpRequest.user as
+    # User | AnonymousUser, but this mixin is only ever combined with LoginRequiredMixin
+    # (which the type system can't see), so a precise annotation needs a shared
+    # AuthenticatedHttpRequest convention, not a one-file fix.
     def test_func(self):
         return bool(self.request.user.is_staff)
 
@@ -35,6 +39,8 @@ class ResolvedObjectMixin:
 
     object_resolver: Callable | None = None
 
+    # Not return-typed: like FormsetMixin below, this bare mixin's self.get_queryset()/
+    # self.kwargs only resolve once combined with a real View subclass.
     def get_object(self, queryset=None):
         return self.object_resolver(
             queryset if queryset is not None else self.get_queryset(), self.kwargs
@@ -54,6 +60,10 @@ class FormsetMixin:
     formset_class: type[BaseInlineFormSet] | None = None
     formset_context_name = "formset"
 
+    # Not return-typed: FormsetMixin is a bare mixin (no base class), always combined with a
+    # real View subclass at actual usage sites. `self.request`/`self.form_invalid`/
+    # `super().get_context_data(...)`/`super().form_valid(...)` only resolve at runtime via
+    # that combination, which mypy can't see from this file alone.
     def get_formset(self):
         instance = getattr(self, "object", None)
         if self.request.method == "POST":

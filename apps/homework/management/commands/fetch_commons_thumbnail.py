@@ -10,6 +10,7 @@ and writes the matching ``<name>.json`` sidecar that the course-form thumbnail p
 import json
 import logging
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from django.conf import settings
@@ -54,10 +55,75 @@ def _default_dir() -> Path:
     return Path(dirs[0]) / THUMBNAIL_PRESET_DIR
 
 
+@dataclass
+class _FetchTargets:
+    """Resolved output paths and metadata for one Commons fetch, computed before any I/O."""
+
+    title: str
+    info: commons.ImageInfo
+    download_url: str
+    stem: str
+    image_path: Path
+    sidecar_path: Path
+    original_path: Path | None
+    target_w: int
+    is_original: bool
+
+
+def _resolve_targets(url: str, out_dir: Path, options: dict) -> _FetchTargets:
+    """Work out what file(s) a Commons reference resolves to, without downloading anything."""
+    title = commons.parse_file_title(url)
+    info = commons.fetch_image_info(title)
+    target_w = commons.best_thumb_width(
+        info.width, info.height, options["width"], options["height"], options["metric"]
+    )
+    download_url, is_original = commons.pick_download_url(info, target_w)
+
+    stem = options["name"] or slugify(commons.title_from_filename(info.title))
+    if not stem:
+        raise CommandError(f"Could not derive a filename for {title!r}; pass --name.")
+    image_path = out_dir / f"{stem}{commons.extension_for(download_url, info.mime)}"
+    sidecar_path = out_dir / f"{stem}.json"
+    # When the preset is a resample, also keep the untouched original (its extension can
+    # differ, e.g. an SVG rasterizes to a PNG thumbnail but the original stays .svg). When
+    # the preset already *is* the original (clamp case), a second copy would be identical.
+    original_path = None
+    if not is_original and not options["skip_original"]:
+        original_path = (
+            out_dir
+            / ORIGINALS_SUBDIR
+            / f"{stem}{commons.extension_for(info.url, info.mime)}"
+        )
+    return _FetchTargets(
+        title=title,
+        info=info,
+        download_url=download_url,
+        stem=stem,
+        image_path=image_path,
+        sidecar_path=sidecar_path,
+        original_path=original_path,
+        target_w=target_w,
+        is_original=is_original,
+    )
+
+
+def _final_dimensions(targets: _FetchTargets) -> tuple[int, int, str]:
+    """Final image dimensions and a short label: originals keep their size, thumbnails are
+    resampled to exactly ``target_w``."""
+    info = targets.info
+    if targets.is_original:
+        return info.width, info.height, "original"
+    return (
+        targets.target_w,
+        round(targets.target_w * info.height / info.width),
+        "resampled",
+    )
+
+
 class Command(BaseCommand):
     help = "Download Wikimedia Commons image(s) + attribution sidecar into the thumbnail presets."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser) -> None:
         parser.add_argument(
             "urls",
             nargs="*",
@@ -126,7 +192,7 @@ class Command(BaseCommand):
             help="Show what would be downloaded + the sidecar, without writing anything.",
         )
 
-    def handle(self, **options):
+    def handle(self, **options) -> None:
         out_dir = Path(options["directory"]) if options["directory"] else _default_dir()
 
         urls = list(options["urls"])
@@ -160,88 +226,85 @@ class Command(BaseCommand):
         if failures:
             raise CommandError(f"{failures} of {len(urls)} reference(s) failed.")
 
-    def _fetch_one(self, url, out_dir: Path, options) -> None:
-        title = commons.parse_file_title(url)
-        info = commons.fetch_image_info(title)
-        target_w = commons.best_thumb_width(
-            info.width,
-            info.height,
-            options["width"],
-            options["height"],
-            options["metric"],
-        )
-        download_url, is_original = commons.pick_download_url(info, target_w)
-
-        stem = options["name"] or slugify(commons.title_from_filename(info.title))
-        if not stem:
-            raise CommandError(
-                f"Could not derive a filename for {title!r}; pass --name."
+    def _fetch_one(self, url: str, out_dir: Path, options: dict) -> None:
+        targets = _resolve_targets(url, out_dir, options)
+        if (
+            targets.image_path.exists() or targets.sidecar_path.exists()
+        ) and not options["overwrite"]:
+            self.stdout.write(
+                f"• {targets.stem}: already exists, skipping (use --overwrite)"
             )
-        image_path = out_dir / f"{stem}{commons.extension_for(download_url, info.mime)}"
-        sidecar_path = out_dir / f"{stem}.json"
-        # When the preset is a resample, also keep the untouched original (its extension can
-        # differ, e.g. an SVG rasterizes to a PNG thumbnail but the original stays .svg). When
-        # the preset already *is* the original (clamp case), a second copy would be identical.
-        original_path = None
-        if not is_original and not options["skip_original"]:
-            original_path = (
-                out_dir
-                / ORIGINALS_SUBDIR
-                / f"{stem}{commons.extension_for(info.url, info.mime)}"
-            )
-
-        if (image_path.exists() or sidecar_path.exists()) and not options["overwrite"]:
-            self.stdout.write(f"• {stem}: already exists, skipping (use --overwrite)")
             return
 
-        attribution = commons.build_attribution(info)
+        attribution = commons.build_attribution(targets.info)
         sidecar_json = json.dumps(attribution, indent=2, sort_keys=True) + "\n"
-
-        # Final size: originals keep their dimensions; thumbnails are resampled to exactly target_w.
-        final_w = info.width if is_original else target_w
-        final_h = (
-            info.height if is_original else round(target_w * info.height / info.width)
-        )
-        note = "original" if is_original else "resampled"
+        final_w, final_h, note = _final_dimensions(targets)
 
         if options["dry_run"]:
-            original_line = (
-                f"    original: {ORIGINALS_SUBDIR}/{original_path.name}"
-                f"  {info.width}x{info.height}\n"
-                if original_path
-                else ""
-            )
-            self.stdout.write(
-                f"[dry-run] {title}\n"
-                f"    image:   {image_path.name}  {final_w}x{final_h} ({note}"
-                f"; source {info.width}x{info.height})\n"
-                + original_line
-                + f"    sidecar: {sidecar_path.name}\n"
-                + "\n".join(f"    {line}" for line in sidecar_json.splitlines())
-            )
+            self._print_dry_run(targets, final_w, final_h, note, sidecar_json)
             return
 
-        if is_original:
-            commons.download(download_url, image_path)
-            actual_w, actual_h = info.width, info.height
+        actual_w, actual_h = self._download(targets, sidecar_json)
+        self._print_success(targets, actual_w, actual_h, note, attribution)
+
+    def _print_dry_run(
+        self,
+        targets: _FetchTargets,
+        final_w: int,
+        final_h: int,
+        note: str,
+        sidecar_json: str,
+    ) -> None:
+        info = targets.info
+        original_line = (
+            f"    original: {ORIGINALS_SUBDIR}/{targets.original_path.name}"
+            f"  {info.width}x{info.height}\n"
+            if targets.original_path
+            else ""
+        )
+        self.stdout.write(
+            f"[dry-run] {targets.title}\n"
+            f"    image:   {targets.image_path.name}  {final_w}x{final_h} ({note}"
+            f"; source {info.width}x{info.height})\n"
+            + original_line
+            + f"    sidecar: {targets.sidecar_path.name}\n"
+            + "\n".join(f"    {line}" for line in sidecar_json.splitlines())
+        )
+
+    def _download(self, targets: _FetchTargets, sidecar_json: str) -> tuple[int, int]:
+        """Download the image (+ original, if kept) and write the sidecar. Returns the
+        actually-downloaded image's dimensions."""
+        if targets.is_original:
+            commons.download(targets.download_url, targets.image_path)
+            actual_w, actual_h = targets.info.width, targets.info.height
         else:
             actual_w, actual_h = commons.download_scaled(
-                download_url, target_w, image_path
+                targets.download_url, targets.target_w, targets.image_path
             )
-        if original_path is not None:
-            original_path.parent.mkdir(parents=True, exist_ok=True)
-            commons.download(info.url, original_path)
-        sidecar_path.write_text(sidecar_json, encoding="utf-8")
+        if targets.original_path is not None:
+            targets.original_path.parent.mkdir(parents=True, exist_ok=True)
+            commons.download(targets.info.url, targets.original_path)
+        targets.sidecar_path.write_text(sidecar_json, encoding="utf-8")
+        return actual_w, actual_h
 
+    def _print_success(
+        self,
+        targets: _FetchTargets,
+        actual_w: int,
+        actual_h: int,
+        note: str,
+        attribution: dict,
+    ) -> None:
+        info = targets.info
         kept = (
             f" + original {info.width}x{info.height} ({ORIGINALS_SUBDIR}/)"
-            if original_path
+            if targets.original_path
             else ""
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f"OK: {image_path.name} {actual_w}x{actual_h} ({note}){kept}, "
-                f"{attribution.get('title', stem)}"
+                f"OK: {targets.image_path.name} {actual_w}x{actual_h} ({note}){kept}, "
+                f"{attribution.get('title', targets.stem)}"
                 f" by {attribution.get('author', 'unknown')}"
                 f" ({attribution.get('license', 'no license')})"
             )

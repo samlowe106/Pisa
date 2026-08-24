@@ -381,7 +381,7 @@ class FetchCommandTests(SimpleTestCase):
             output = self._run("File:Big.jpg", "--dir", tmp, "--dry-run")
 
             self.assertIn("originals/big.jpg", output)
-            self.assertIn("3000×2000", output)
+            self.assertIn("3000x2000", output)
             self.assertEqual(list(Path(tmp).iterdir()), [])  # still nothing written
             mocks["download"].assert_not_called()
 

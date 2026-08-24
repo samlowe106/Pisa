@@ -79,7 +79,8 @@ def popen_kwargs(cpu_seconds=None) -> dict:
     sandbox is enabled. Pass ``cpu_seconds=None`` for long-lived processes (the LSP server) so
     they aren't killed by a CPU-time cap."""
     kwargs: dict = {"start_new_session": True}
-    if _conf("LEAN_SANDBOX_ENABLED", True):
+    # _conf(name, default) mirrors getattr(obj, name, default), not a boolean-flag API.
+    if _conf("LEAN_SANDBOX_ENABLED", True):  # noqa: FBT003
         kwargs["env"] = sandbox_env()
         if resource is not None:
             kwargs["preexec_fn"] = _build_preexec(cpu_seconds)
@@ -92,7 +93,7 @@ def wrap_argv(argv, *, workdir=None) -> list:
     directory the Lean file lives in), so a read-only-filesystem sandbox (bubblewrap) can still
     bind that one directory in (e.g. ``--bind {workdir} {workdir} --chdir {workdir}``).
     """
-    if not _conf("LEAN_SANDBOX_ENABLED", True):
+    if not _conf("LEAN_SANDBOX_ENABLED", True):  # noqa: FBT003
         return list(argv)
     wrapper = _conf("LEAN_SANDBOX_WRAPPER", None) or []
     if workdir is not None:

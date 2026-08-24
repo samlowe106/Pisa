@@ -478,6 +478,32 @@ class CourseDetailStatsAndMemberTests(TestCase):
         )
 
 
+class CourseDetailRosterVisibilityTests(TestCase):
+    def setUp(self):
+        self.m = make_role_matrix()
+        self.url = reverse("homework:course_detail", kwargs={"slug": "test-course"})
+
+    def test_outsider_sees_no_student_names(self):
+        # The course page itself is browsable pre-enrollment (there's an "Enroll in course"
+        # form right on it), but that must not also expose who's already enrolled.
+        self.client.force_login(self.m["outsider"])
+        response = self.client.get(self.url)
+        self.assertEqual(response.context["students"], [])
+        self.assertNotContains(response, "t_student")
+
+    def test_enrolled_student_sees_classmates(self):
+        self.client.force_login(self.m["student"])
+        response = self.client.get(self.url)
+        names = [s["name"] for s in response.context["students"]]
+        self.assertEqual(len(names), 1)
+
+    def test_instructor_sees_the_roster(self):
+        self.client.force_login(self.m["instructor"])
+        response = self.client.get(self.url)
+        names = [s["name"] for s in response.context["students"]]
+        self.assertEqual(len(names), 1)
+
+
 class CourseDetailLineageTests(TestCase):
     def setUp(self):
         self.m = make_role_matrix()

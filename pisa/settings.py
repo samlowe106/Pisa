@@ -23,7 +23,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def env_bool(name: str, default: bool = False) -> bool:
+def env_bool(name: str, *, default: bool = False) -> bool:
     """Read a boolean env var. Accepts 1/true/yes/on (any case); everything else is False.
     (Plain ``bool(os.environ.get(...))`` is a trap: ``bool("False")`` is ``True``.)"""
     value = os.environ.get(name)
@@ -39,7 +39,7 @@ def env_bool(name: str, default: bool = False) -> bool:
 SECRET_KEY = os.environ["SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env_bool("DEBUG", False)
+DEBUG = env_bool("DEBUG", default=False)
 
 # Hosts/domains the site may be served on. Self-hosters set PISA_DOMAIN (the single public
 # hostname, e.g. lean.school.edu); ALLOWED_HOSTS (comma-separated) is also honoured for
@@ -54,7 +54,9 @@ ALLOWED_HOSTS: list[str] = [
 if PISA_DOMAIN:
     ALLOWED_HOSTS.append(PISA_DOMAIN)
 if DEBUG and not ALLOWED_HOSTS:
-    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]
+    # Only reachable when DEBUG=True and nothing set PISA_DOMAIN/ALLOWED_HOSTS: a bare
+    # `docker compose up` in dev, never a production path.
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]  # noqa: S104
 
 # Behind HTTPS on a custom domain, Django needs the site's own origin trusted for POSTs.
 CSRF_TRUSTED_ORIGINS = [f"https://{PISA_DOMAIN}"] if PISA_DOMAIN else []
@@ -63,14 +65,16 @@ CSRF_TRUSTED_ORIGINS = [f"https://{PISA_DOMAIN}"] if PISA_DOMAIN else []
 # (the bundled Caddy), which forwards X-Forwarded-Proto so Django knows the request is secure.
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", default=True)
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     # HSTS is opt-in (it's sticky: a wrong value can lock a domain out of HTTP). Set
     # SECURE_HSTS_SECONDS once you're confident HTTPS is permanent.
     SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
-    SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", False)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+        "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False
+    )
+    SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", default=False)
 
 
 # Application definition
@@ -295,7 +299,7 @@ LEAN_TIMEOUT = int(os.environ.get("LEAN_TIMEOUT", "60"))
 # Student-submitted Lean is untrusted code (elaboration can run IO), so every Lean process is
 # launched with a stripped environment, POSIX resource limits, and its own process group.
 # Set LEAN_SANDBOX_ENABLED=False to turn this off (not recommended).
-LEAN_SANDBOX_ENABLED = env_bool("LEAN_SANDBOX_ENABLED", True)
+LEAN_SANDBOX_ENABLED = env_bool("LEAN_SANDBOX_ENABLED", default=True)
 # Env var names (regex, case-insensitive) to drop before running Lean. The defaults strip the
 # usual secrets while keeping HOME/PATH/ELAN_HOME so the toolchain still resolves.
 LEAN_SANDBOX_DENY_ENV = [

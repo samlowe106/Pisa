@@ -8,7 +8,7 @@ from django.http import JsonResponse
 logger = logging.getLogger(__name__)
 
 
-def healthz(request):
+def healthz(request):  # noqa: ARG001 - Django's fixed view signature
     """200 if the app can reach its database, 503 otherwise."""
     # Fail closed: start unhealthy and only flip to healthy once the check actually succeeds,
     # so a future check added here that forgets to set healthy=False on its own failure path

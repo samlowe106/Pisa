@@ -1,9 +1,13 @@
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.forms.models import BaseInlineFormSet
 
 from ..models import Course
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from django.forms.models import BaseInlineFormSet
 
 
 class StaffRequiredMixin(UserPassesTestMixin):

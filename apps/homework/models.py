@@ -290,6 +290,16 @@ class Problem(models.Model):
     def __str__(self):
         return f"{self.assignment.title}: {self.display_name}"
 
+    def get_absolute_url(self):
+        return reverse(
+            "homework:problem_detail",
+            kwargs={
+                "course_slug": self.assignment.course.slug,
+                "assignment_slug": self.assignment.slug,
+                "number": self.position,
+            },
+        )
+
     @property
     def position(self):
         """1-based index of this problem within its assignment (the URL number).
@@ -315,16 +325,6 @@ class Problem(models.Model):
         if self.pk:
             return f"Problem {self.position}"
         return "Problem"
-
-    def get_absolute_url(self):
-        return reverse(
-            "homework:problem_detail",
-            kwargs={
-                "course_slug": self.assignment.course.slug,
-                "assignment_slug": self.assignment.slug,
-                "number": self.position,
-            },
-        )
 
 
 class ProblemBlock(models.Model):

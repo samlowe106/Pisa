@@ -8,6 +8,7 @@ and writes the matching ``<name>.json`` sidecar that the course-form thumbnail p
 """
 
 import json
+import logging
 import time
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from django.utils.text import slugify
 
 from apps.homework import commons
 from apps.homework.thumbnails import THUMBNAIL_PRESET_DIR
+
+logger = logging.getLogger(__name__)
 
 # Be gentle on the Commons API between images in a batch (a tight loop earns a 429).
 _BATCH_DELAY_SECONDS = 1.0
@@ -35,8 +38,8 @@ def _read_manifest(path: Path) -> list[str]:
     if not path.is_file():
         raise CommandError(f"Manifest not found: {path}")
     entries = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.split("#", 1)[0].strip()
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
         if line:
             entries.append(line)
     return entries
@@ -123,7 +126,8 @@ class Command(BaseCommand):
             help="Show what would be downloaded + the sidecar, without writing anything.",
         )
 
-    def handle(self, *args, **options):
+    # args is part of Django's fixed handle() signature; this command only uses **options.
+    def handle(self, *args, **options):  # noqa: ARG002
         out_dir = Path(options["directory"]) if options["directory"] else _default_dir()
 
         urls = list(options["urls"])
@@ -149,10 +153,9 @@ class Command(BaseCommand):
                 time.sleep(_BATCH_DELAY_SECONDS)
             try:
                 self._fetch_one(url, out_dir, options)
-            except (
-                Exception
-            ) as exc:  # noqa: BLE001 - one bad page shouldn't abort the batch
+            except Exception as exc:
                 failures += 1
+                logger.exception("fetch_commons_thumbnail failed for %s", url)
                 self.stderr.write(self.style.ERROR(f"FAILED: {url}: {exc}"))
 
         if failures:
@@ -205,14 +208,14 @@ class Command(BaseCommand):
         if options["dry_run"]:
             original_line = (
                 f"    original: {ORIGINALS_SUBDIR}/{original_path.name}"
-                f"  {info.width}×{info.height}\n"
+                f"  {info.width}x{info.height}\n"
                 if original_path
                 else ""
             )
             self.stdout.write(
                 f"[dry-run] {title}\n"
-                f"    image:   {image_path.name}  {final_w}×{final_h} ({note}"
-                f"; source {info.width}×{info.height})\n"
+                f"    image:   {image_path.name}  {final_w}x{final_h} ({note}"
+                f"; source {info.width}x{info.height})\n"
                 + original_line
                 + f"    sidecar: {sidecar_path.name}\n"
                 + "\n".join(f"    {line}" for line in sidecar_json.splitlines())
@@ -232,13 +235,13 @@ class Command(BaseCommand):
         sidecar_path.write_text(sidecar_json, encoding="utf-8")
 
         kept = (
-            f" + original {info.width}×{info.height} ({ORIGINALS_SUBDIR}/)"
+            f" + original {info.width}x{info.height} ({ORIGINALS_SUBDIR}/)"
             if original_path
             else ""
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f"OK: {image_path.name} {actual_w}×{actual_h} ({note}){kept}, "
+                f"OK: {image_path.name} {actual_w}x{actual_h} ({note}){kept}, "
                 f"{attribution.get('title', stem)}"
                 f" by {attribution.get('author', 'unknown')}"
                 f" ({attribution.get('license', 'no license')})"

@@ -15,6 +15,7 @@ See homework/lean_lsp.py for the framing/assembly/remapping helpers.
 import asyncio
 import contextlib
 import json
+import logging
 import shlex
 import shutil
 import tempfile
@@ -27,6 +28,8 @@ from django.core.cache import cache
 
 from . import lean_lsp, sandbox
 from .models import Problem, ProblemBlock
+
+logger = logging.getLogger(__name__)
 
 # At most one live `lean --server` process per user, across all their tabs/windows/devices.
 # The current holder's channel name is kept in the Django cache (LocMemCache by default, so
@@ -65,32 +68,34 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
         self.user_group = _user_group(self.user_id)
         self.has_claim = False
         takeover = b"takeover=1" in self.scope.get("query_string", b"")
-        self._takeover = takeover
         key = _lean_holder_key(self.user_id)
 
         # One live Lean instance per user. A passive connection while another is already live is
-        # rejected as busy; the client greys the editor and offers "Use Lean here", which
-        # reconnects with ?takeover=1 to evict the current holder instead of contending for the
-        # slot. ``cache.aadd`` is an atomic set-if-absent (Redis SETNX under the real backend),
-        # so the non-takeover busy check and the claim are the same operation: no race window
-        # for two concurrent connects to both slip through, even across worker processes.
-        previous = None
-        if takeover:
-            previous = await cache.aget(key)
-            await cache.aset(key, self.channel_name, timeout=settings.LEAN_CAP_TTL)
-        elif not await cache.aadd(
-            key, self.channel_name, timeout=settings.LEAN_CAP_TTL
-        ):
-            await self.accept()
-            await self._send_status(
-                "busy", "A Pisa Lean instance is open in another window."
-            )
-            await self.close(code=WS_CLOSE_BUSY)
-            return
-        self.has_claim = True
-        # Refresh the claim's TTL while the connection is open, so a crashed worker's holder
-        # expires instead of leaking a permanently "busy" slot (see LEAN_CAP_TTL).
-        self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        # rejected as busy up front; the client greys the editor and offers "Use Lean here",
+        # which reconnects with ?takeover=1. ``cache.aadd`` is an atomic set-if-absent (Redis
+        # SETNX under the real backend), so the non-takeover busy check and the claim are the
+        # same operation: no race window for two concurrent connects to both slip through, even
+        # across worker processes.
+        #
+        # Takeover claims the slot further down (see the `takeover:` block below), only once
+        # we know this connection will actually proceed: claiming here, before the
+        # permission/support/config checks that follow, would stomp the real holder's cache
+        # entry even if this takeover then failed one of those checks, leaving that holder
+        # disconnected from its own slot while still believing it holds it.
+        if not takeover:
+            if not await cache.aadd(
+                key, self.channel_name, timeout=settings.LEAN_CAP_TTL
+            ):
+                await self.accept()
+                await self._send_status(
+                    "busy", "A Pisa Lean instance is open in another window."
+                )
+                await self.close(code=WS_CLOSE_BUSY)
+                return
+            self.has_claim = True
+            # Refresh the claim's TTL while the connection is open, so a crashed worker's holder
+            # expires instead of leaking a permanently "busy" slot (see LEAN_CAP_TTL).
+            self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
         self.problem_pk = self.scope["url_route"]["kwargs"]["problem_pk"]
         context = await self._load_context(self.problem_pk, user)
@@ -129,9 +134,31 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
             await self.close(code=4003)
             return
 
-        if self._takeover and previous and previous != self.channel_name:
+        if takeover:
+            # Commit the takeover now that we know it will actually proceed. ``aset``
+            # unconditionally wins the slot (last write takes it); broadcasting the evict
+            # before joining the group means we never evict ourselves, and any holder already
+            # in the group (the real previous holder, or a competing takeover that joined
+            # first) gets it directly. A second, concurrent takeover that joins the group
+            # *after* this broadcast would miss it, so the recheck right after group_add
+            # catches that case too: whichever takeover's `aset` happened last is the only one
+            # whose recheck still finds itself the holder, so it's the only one left standing.
+            await cache.aset(key, self.channel_name, timeout=settings.LEAN_CAP_TTL)
+            self.has_claim = True
+            self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             await self.channel_layer.group_send(self.user_group, {"type": "lean.evict"})
-        await self.channel_layer.group_add(self.user_group, self.channel_name)
+            await self.channel_layer.group_add(self.user_group, self.channel_name)
+            if await cache.aget(key) != self.channel_name:
+                self._evicted = True
+                await self._release_claim()
+                await self.accept()
+                await self._send_status(
+                    "taken_over", "Lean is now open in another window."
+                )
+                await self.close(code=WS_CLOSE_TAKEN_OVER)
+                return
+        else:
+            await self.channel_layer.group_add(self.user_group, self.channel_name)
 
         try:
             self.process = await asyncio.create_subprocess_exec(
@@ -157,7 +184,8 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
         self.stderr_task = asyncio.create_task(self._drain_stderr())
         await self.accept()
 
-    async def disconnect(self, close_code):
+    # close_code is part of Channels' fixed disconnect() override signature.
+    async def disconnect(self, close_code):  # noqa: ARG002
         await self._release_claim()
         for task in (
             getattr(self, "reader_task", None),
@@ -171,8 +199,22 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
                 proc.kill()
         self._cleanup_tmp()
 
-    async def lean_evict(self, event):
-        """Another window of the same user claimed the Lean slot via "Use Lean here"."""
+    # event is part of the channel-layer event-handler signature (see the group_send above).
+    async def lean_evict(self, event):  # noqa: ARG002
+        """Another window of the same user claimed the Lean slot via "Use Lean here".
+
+        Two takeovers racing each other can each broadcast an evict, so a given connection may
+        receive more than one, and delivery can be delayed enough that a stale broadcast (from
+        a takeover that was itself later superseded) arrives after we've already become the
+        current holder again. Check the cache rather than trusting the broadcast blindly, and
+        ignore anything past the first real eviction, so we never close twice.
+        """
+        if getattr(self, "_evicted", False):
+            return
+        key = _lean_holder_key(self.user_id)
+        if await cache.aget(key) == self.channel_name:
+            return
+        self._evicted = True
         await self._send_status("taken_over", "Lean is now open in another window.")
         await self.close(code=WS_CLOSE_TAKEN_OVER)
 
@@ -201,7 +243,8 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
             await cache.adelete(key)
         await self.channel_layer.group_discard(self.user_group, self.channel_name)
 
-    async def receive(self, text_data=None, bytes_data=None):
+    # bytes_data is part of Channels' fixed receive() signature; this consumer is text-only.
+    async def receive(self, text_data=None, bytes_data=None):  # noqa: ARG002
         proc = getattr(self, "process", None)
         if not proc or proc.stdin is None or not text_data:
             return
@@ -281,19 +324,27 @@ class LeanLSPConsumer(AsyncWebsocketConsumer):
                 try:
                     await self.send(text_data=json.dumps(message))
                 except Exception:
+                    # Expected during an ordinary disconnect race (the browser socket closed
+                    # while we were mid-send); debug rather than warning so a normal teardown
+                    # doesn't look like an error in the logs.
+                    logger.debug(
+                        "Failed to forward a Lean message to the browser", exc_info=True
+                    )
                     break
         except (asyncio.IncompleteReadError, asyncio.CancelledError):
             pass
         except Exception:
-            pass
+            logger.warning("Lean stdout reader ended unexpectedly", exc_info=True)
 
     async def _drain_stderr(self):
         reader = self.process.stderr
         try:
             while await reader.readline():
                 pass
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception:
+            logger.warning("Lean stderr drain ended unexpectedly", exc_info=True)
 
     # -- helpers --------------------------------------------------------------------------
 

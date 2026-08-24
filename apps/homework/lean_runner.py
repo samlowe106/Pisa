@@ -6,6 +6,7 @@ Used by the run/submit views (``views/problems.py``) and shared with the live-LS
 ``consumers.py``.
 """
 
+import logging
 import re
 import shutil
 import subprocess
@@ -16,6 +17,8 @@ from django.conf import settings
 
 from . import lean_policy, sandbox
 from .models import Problem, ProblemBlock, Submission
+
+logger = logging.getLogger(__name__)
 
 
 def get_lean_executable() -> str:
@@ -41,7 +44,7 @@ def _sandbox_wrapper_failed(stderr: str | None) -> bool:
     return any(line.startswith("bwrap:") for line in (stderr or "").splitlines())
 
 
-def sanitize_lean_output(output: str, keep_internal: bool = False) -> str:
+def sanitize_lean_output(output: str, *, keep_internal: bool = False) -> str:
     if keep_internal or not output:
         return output or ""
 
@@ -57,11 +60,13 @@ def sanitize_lean_output(output: str, keep_internal: bool = False) -> str:
     return "\n".join(lines)
 
 
-def filter_lean_response(response: dict, keep_internal: bool) -> dict:
+def filter_lean_response(response: dict, *, keep_internal: bool) -> dict:
     filtered = response.copy()
     for key in ("stdout", "stderr"):
         if key in filtered and filtered[key] is not None:
-            filtered[key] = sanitize_lean_output(filtered[key], keep_internal)
+            filtered[key] = sanitize_lean_output(
+                filtered[key], keep_internal=keep_internal
+            )
     return filtered
 
 
@@ -84,7 +89,7 @@ def parse_lean_feedback(
                 errors.append(line)
             elif lower.startswith("goal:"):
                 goals.append(stripped[len("goal:") :].strip())
-            elif lower.startswith("msg:") or lower.startswith("message:"):
+            elif lower.startswith(("msg:", "message:")):
                 messages.append(stripped.split(":", 1)[1].strip())
             elif re.search(r"\berror\b", lower):
                 errors.append(line)
@@ -108,8 +113,8 @@ def parse_lean_feedback(
     }
 
 
-def build_lean_run_response(response: dict, keep_internal: bool) -> dict:
-    filtered = filter_lean_response(response, keep_internal)
+def build_lean_run_response(response: dict, *, keep_internal: bool) -> dict:
+    filtered = filter_lean_response(response, keep_internal=keep_internal)
     parsed = parse_lean_feedback(
         filtered.get("stdout"), filtered.get("stderr"), filtered.get("returncode")
     )
@@ -192,7 +197,11 @@ def run_lean_process(code: str, extra: str = "") -> dict:
             getattr(settings, "LEAN_SANDBOX_CPU_SECONDS", 0) or wall_timeout * 4
         )
         try:
-            process = subprocess.Popen(
+            # `argv` is a list built entirely from sandbox.wrap_argv() (fixed wrapper flags,
+            # the resolved Lean executable path, and the sandboxed source file path); running
+            # untrusted *content* is the whole point (student Lean code), but the argv itself
+            # is never shell-interpolated or built from untrusted strings.
+            process = subprocess.Popen(  # noqa: S603
                 argv,
                 cwd=workdir,
                 stdout=subprocess.PIPE,
@@ -233,7 +242,9 @@ def grade_lean_submission(
     problem: Problem,
     code: str,
     student_code: str | None = None,
+    *,
     keep_internal: bool = False,
+    user=None,
 ) -> tuple[str, str]:
     if problem.required_code and problem.required_code.strip() not in code:
         return (
@@ -247,6 +258,12 @@ def grade_lean_submission(
         student_code if student_code is not None else code, allowed=allowed
     )
     if hits:
+        logger.warning(
+            "Blocked submission: user=%s problem=%s rules=%s",
+            user,
+            problem.pk,
+            [rule.id for rule in hits],
+        )
         listed = "\n".join(f"  • {rule.id}: {rule.reason}" for rule in hits)
         return (
             Submission.STATUS_FAILED,
@@ -300,10 +317,18 @@ def grade_lean_submission(
             if bad is None:
                 return (
                     Submission.STATUS_FAILED,
-                    f"Could not verify the axioms of '{problem.axiom_target}'. "
-                    "Check that this declaration exists in the submission.",
+                    (
+                        f"Could not verify the axioms of '{problem.axiom_target}'. "
+                        "Check that this declaration exists in the submission."
+                    ),
                 )
             if bad:
+                logger.warning(
+                    "Blocked submission: user=%s problem=%s axioms=%s",
+                    user,
+                    problem.pk,
+                    sorted(bad),
+                )
                 if "sorryAx" in bad:
                     return (
                         Submission.STATUS_FAILED,

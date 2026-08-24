@@ -87,9 +87,7 @@ def _host_matches(host: str, host_set: set[str]) -> bool:
 
 
 def _is_external(url: str) -> bool:
-    return (
-        url.startswith("http://") or url.startswith("https://") or url.startswith("//")
-    )
+    return url.startswith(("http://", "https://", "//"))
 
 
 def _host_of(url: str) -> str:

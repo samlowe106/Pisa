@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 
 def find_lean_lsp():
@@ -14,19 +15,19 @@ def find_lean_lsp():
     candidates = [
         "lean --server",
         "lean-language-server",
-        os.path.expanduser("~/.elan/bin/lean --server"),
+        str(Path("~/.elan/bin/lean --server").expanduser()),
     ]
 
     # Check elan toolchain
     try:
         result = subprocess.run(
-            ["elan", "show"], capture_output=True, text=True, timeout=5
+            ["elan", "show"], capture_output=True, text=True, timeout=5, check=False
         )
         if result.returncode == 0:
             # elan is installed; try to get the toolchain
             print("elan is installed:", result.stdout.strip())
             candidates.append("lean --server")  # Will use elan's lean
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - best-effort probe, reported and moved on
         print(f"elan check failed: {e}")
 
     for cmd_str in candidates:
@@ -34,9 +35,9 @@ def find_lean_lsp():
         exe = parts[0]
 
         # Handle full paths
-        if exe.startswith("/") or exe.startswith("~"):
-            exe_to_check = os.path.expanduser(exe)
-            if os.path.isfile(exe_to_check) and os.access(exe_to_check, os.X_OK):
+        if exe.startswith(("/", "~")):
+            exe_to_check = str(Path(exe).expanduser())
+            if Path(exe_to_check).is_file() and os.access(exe_to_check, os.X_OK):
                 print(f"Found: {cmd_str}")
                 try:
                     result = subprocess.run(
@@ -44,6 +45,7 @@ def find_lean_lsp():
                         capture_output=True,
                         text=True,
                         timeout=5,
+                        check=False,
                     )
                     if (
                         "--server" in result.stdout
@@ -51,7 +53,7 @@ def find_lean_lsp():
                     ):
                         print("  Looks like LSP support!")
                         return cmd_str
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"  Help check failed: {e}")
         else:
             # Check in PATH
@@ -59,7 +61,11 @@ def find_lean_lsp():
                 print(f"Found: {cmd_str}")
                 try:
                     result = subprocess.run(
-                        [exe, "--help"], capture_output=True, text=True, timeout=5
+                        [exe, "--help"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=False,
                     )
                     if (
                         "--server" in result.stdout
@@ -67,8 +73,8 @@ def find_lean_lsp():
                     ):
                         print("  Looks like LSP support!")
                         return cmd_str
-                except Exception:
-                    pass
+                except Exception as e:  # noqa: BLE001
+                    print(f"  Help check failed: {e}")
             else:
                 print(f"Not found: {exe}")
 

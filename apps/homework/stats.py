@@ -34,7 +34,9 @@ class TestResult(NamedTuple):
 
 
 def _rng(rng):
-    return rng if rng is not None else random.Random(DEFAULT_SEED)
+    # Statistical resampling (permutation tests), not security: reproducibility matters, not
+    # unpredictability.
+    return rng if rng is not None else random.Random(DEFAULT_SEED)  # noqa: S311
 
 
 def _sample_var(values, m):
@@ -98,7 +100,7 @@ def _average_ranks(values):
 
 
 def mannwhitneyu(x, y, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
-    """Mann–Whitney U (rank-sum), tie-corrected, with a two-sided permutation p-value.
+    """Mann-Whitney U (rank-sum), tie-corrected, with a two-sided permutation p-value.
     Returns U for ``x``.
 
     scipy: ``scipy.stats.mannwhitneyu(x, y, alternative='two-sided')``.
@@ -119,7 +121,7 @@ def mannwhitneyu(x, y, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
 
 
 def chi2_statistic(table):
-    """Pearson χ² statistic for an r×c table of counts."""
+    """Pearson χ² statistic for an rxc table of counts."""
     row_totals = [sum(row) for row in table]
     col_totals = [sum(col) for col in zip(*table, strict=True)]
     n = sum(row_totals)
@@ -135,7 +137,7 @@ def chi2_statistic(table):
 
 
 def chi2_contingency(table, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
-    """Pearson χ² for a 2×c table with a permutation p-value (shuffles the row label of the
+    """Pearson χ² for a 2xc table with a permutation p-value (shuffles the row label of the
     underlying individuals), appropriate when expected cell counts are small.
 
     scipy: ``scipy.stats.chi2_contingency(table)`` (analytic).
@@ -163,11 +165,11 @@ def chi2_contingency(table, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
 
 
 def false_discovery_control(pvalues, *, method="bh"):
-    """Benjamini–Hochberg adjusted p-values (FDR control). Mirrors
+    """Benjamini-Hochberg adjusted p-values (FDR control). Mirrors
     ``scipy.stats.false_discovery_control(ps, method='bh')``."""
     if method != "bh":
         raise NotImplementedError(
-            "only the Benjamini–Hochberg ('bh') method is implemented"
+            "only the Benjamini-Hochberg ('bh') method is implemented"
         )
     pvalues = list(pvalues)
     m = len(pvalues)
@@ -204,7 +206,7 @@ def cohens_d(a, b):
 
 
 def cliffs_delta(a, b):
-    """Cliff's δ = P(a > b) − P(a < b): the nonparametric effect size (= rank-biserial r)."""
+    """Cliff's δ = P(a > b) - P(a < b): the nonparametric effect size (= rank-biserial r)."""
     a, b = list(a), list(b)
     if not a or not b:
         return float("nan")
@@ -247,7 +249,7 @@ class ScoreComparison:
 
 
 def compare_scores(a, b, *, n_resamples=DEFAULT_RESAMPLES, rng=None):
-    """Full continuous-score comparison: Welch (permutation) + Mann–Whitney + effect sizes.
+    """Full continuous-score comparison: Welch (permutation) + Mann-Whitney + effect sizes.
     Returns a ``ScoreComparison`` whose tests are ``None`` when a group has < 2 observations.
     """
     a, b = list(a), list(b)

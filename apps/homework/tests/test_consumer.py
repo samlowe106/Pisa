@@ -131,7 +131,7 @@ class LeanInstanceCapTests(TransactionTestCase):
         first, _ = await self._open(self.user)
         holder = _holder(self.user.id)
 
-        second, connected = await self._open(self.user)
+        second, _connected = await self._open(self.user)
         # Accepted, then told "busy" and closed: the slot is NOT reassigned.
         status = await second.receive_json_from(timeout=10)
         self.assertEqual(status["pisa"]["status"], "busy")
@@ -162,6 +162,43 @@ class LeanInstanceCapTests(TransactionTestCase):
 
         await first.disconnect()
         await second.disconnect()
+
+    async def test_concurrent_takeovers_leave_exactly_one_holder(self):
+        # Two ?takeover=1 connects from the same user racing each other (e.g. a double-click on
+        # "Use Lean here"): exactly one must end up holding the slot, and every other connection
+        # (the original holder, and the takeover that lost the race) must actually be told
+        # taken_over and close, rather than the loser silently believing it still holds a slot
+        # nobody will ever renew for it.
+        original, _ = await self._open(self.user)
+
+        (first, first_ok), (second, second_ok) = await asyncio.gather(
+            self._open(self.user, takeover=True), self._open(self.user, takeover=True)
+        )
+        self.assertTrue(first_ok)
+        self.assertTrue(second_ok)
+
+        async def told_taken_over(comm):
+            try:
+                status = await comm.receive_json_from(timeout=2)
+            except TimeoutError:
+                return False
+            if status.get("pisa", {}).get("status") != "taken_over":
+                return False
+            await comm.receive_output(timeout=2)  # drain the close frame that follows
+            await comm.disconnect()
+            return True
+
+        original_evicted = await told_taken_over(original)
+        first_evicted = await told_taken_over(first)
+        second_evicted = await told_taken_over(second)
+
+        # The original holder is always evicted; exactly one of the two takeovers loses too.
+        # (The surviving takeover is left connected, not explicitly disconnected here: a timed
+        # out receive_json_from already tears down its underlying app task as a side effect,
+        # same as the winner in test_concurrent_connections_do_not_both_claim_the_slot above.)
+        self.assertTrue(original_evicted)
+        self.assertEqual([first_evicted, second_evicted].count(True), 1)
+        self.assertIsNotNone(_holder(self.user.id))
 
     async def test_a_different_user_gets_their_own_slot(self):
         # The cap is per user, so two distinct users can both hold a live instance.
@@ -262,7 +299,7 @@ class LeanSocketAccessTests(TransactionTestCase):
         await communicator.disconnect()
 
     async def test_outsider_is_refused(self):
-        communicator, connected = await _open_for(
+        _communicator, connected = await _open_for(
             self.m["outsider"], self.m["problem"].pk
         )
         self.assertFalse(connected)  # closed before accept, no Lean spawned
@@ -461,7 +498,7 @@ class LeanLSPConnectErrorTests(TransactionTestCase):
         self.assertIsNone(_holder(self.m["student"].id))  # claim released, not leaked
 
     async def test_nonexistent_problem_is_refused(self):
-        communicator, connected = await _open_for(self.m["student"], 999999999)
+        _communicator, connected = await _open_for(self.m["student"], 999999999)
         self.assertFalse(connected)  # closed before accept: no such problem
         self.assertIsNone(_holder(self.m["student"].id))
 

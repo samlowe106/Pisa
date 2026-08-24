@@ -1,9 +1,12 @@
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
 from django.views.generic import TemplateView, View
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from ..exports import export_submissions_csv, export_submissions_excel
 from ..models import (

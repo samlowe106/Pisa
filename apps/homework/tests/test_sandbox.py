@@ -9,6 +9,7 @@ import os
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 
 from django.test import SimpleTestCase, override_settings
 
@@ -88,31 +89,32 @@ class SandboxMechanicsTests(SimpleTestCase):
             ["python3", "-c", "x=0\nwhile True: x+=1"],
             capture_output=True,
             timeout=20,
+            check=False,
             **sandbox.popen_kwargs(cpu_seconds=1),
         )
         self.assertLess(result.returncode, 0)
 
     def test_kill_process_group_reaps_children(self):
         with tempfile.TemporaryDirectory() as d:
-            pidfile = os.path.join(d, "child.pid")
+            pidfile = Path(d) / "child.pid"
             proc = subprocess.Popen(
                 ["sh", "-c", f"sleep 60 & echo $! > {pidfile}; wait"],
                 **sandbox.popen_kwargs(cpu_seconds=None),
             )
             child_pid = None
             for _ in range(200):  # wait up to ~2s for the child to spawn
-                if os.path.exists(pidfile) and os.path.getsize(pidfile):
-                    with open(pidfile) as f:
+                if pidfile.exists() and pidfile.stat().st_size:
+                    with pidfile.open() as f:
                         child_pid = int(f.read())
                     break
-                subprocess.run(["sleep", "0.01"])
+                subprocess.run(["sleep", "0.01"], check=False)
             self.assertIsNotNone(child_pid)
             sandbox.kill_process_group(proc)
             proc.wait(timeout=5)
             for _ in range(200):
                 try:
                     os.kill(child_pid, 0)
-                    subprocess.run(["sleep", "0.01"])
+                    subprocess.run(["sleep", "0.01"], check=False)
                 except ProcessLookupError:
                     break
             with self.assertRaises(ProcessLookupError):
@@ -132,32 +134,30 @@ class SandboxIsolationTests(SimpleTestCase):
                 capture_output=True,
                 text=True,
                 timeout=40,
+                check=False,
                 **sandbox.popen_kwargs(cpu_seconds=15),
             )
 
     def test_network_is_blocked(self):
-        result = self._run(
-            [
-                "python3",
-                "-c",
-                "import socket; s=socket.socket(); s.settimeout(3); "
-                "s.connect(('1.1.1.1', 53)); print('CONNECTED')",
-            ]
+        probe_code = (
+            "import socket; s=socket.socket(); s.settimeout(3); "
+            "s.connect(('1.1.1.1', 53)); print('CONNECTED')"
         )
+        result = self._run(["python3", "-c", probe_code])
         self.assertNotIn("CONNECTED", result.stdout)
         self.assertNotEqual(result.returncode, 0)
 
     def test_filesystem_is_read_only_outside_workdir(self):
-        marker = "/pisa_escape_test_marker"
+        marker = Path("/pisa_escape_test_marker")
         try:
             result = self._run(
                 ["sh", "-c", f"echo x > {marker} && echo WROTE || echo BLOCKED"]
             )
             self.assertIn("BLOCKED", result.stdout)
-            self.assertFalse(os.path.exists(marker))  # nothing escaped to the host
+            self.assertFalse(marker.exists())  # nothing escaped to the host
         finally:
-            if os.path.exists(marker):
-                os.remove(marker)
+            if marker.exists():
+                marker.unlink()
 
 
 @requires_lean
@@ -174,11 +174,11 @@ class SandboxAdversarialLeanEscapeTests(SimpleTestCase):
     """
 
     def test_malicious_lean_source_cannot_write_outside_its_workdir(self):
-        marker = "/pisa_lean_escape_marker"
+        marker = Path("/pisa_lean_escape_marker")
 
         def _cleanup():
-            if os.path.exists(marker):
-                os.remove(marker)
+            if marker.exists():
+                marker.unlink()
 
         self.addCleanup(_cleanup)
         program = f"""
@@ -192,7 +192,7 @@ class SandboxAdversarialLeanEscapeTests(SimpleTestCase):
         result = run_lean_process(program)
         self.assertIn("PISA_ESCAPE: BLOCKED", result["stdout"])
         self.assertNotIn("WROTE", result["stdout"])
-        self.assertFalse(os.path.exists(marker))  # nothing escaped to the host
+        self.assertFalse(marker.exists())  # nothing escaped to the host
 
     def test_malicious_lean_source_cannot_reach_the_network(self):
         program = r"""
@@ -253,6 +253,7 @@ class SandboxResourceLimitTests(SimpleTestCase):
             capture_output=True,
             text=True,
             timeout=20,
+            check=False,
             **sandbox.popen_kwargs(cpu_seconds=None),
         )
         return [int(x) for x in result.stdout.split()]
@@ -273,15 +274,20 @@ class SandboxResourceLimitTests(SimpleTestCase):
     def test_fsize_limit_kills_a_runaway_writer(self):
         # Writing well past the 1 MB cap trips RLIMIT_FSIZE (SIGXFSZ becomes negative return code).
         with tempfile.TemporaryDirectory() as d:
-            target = os.path.join(d, "big.bin")
+            target = Path(d) / "big.bin"
             result = subprocess.run(
-                ["python3", "-c", f"open({target!r},'wb').write(b'x'*(50*1024*1024))"],
+                [
+                    "python3",
+                    "-c",
+                    f"open({str(target)!r},'wb').write(b'x'*(50*1024*1024))",
+                ],
                 capture_output=True,
                 timeout=20,
+                check=False,
                 **sandbox.popen_kwargs(cpu_seconds=5),
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertLess(os.path.getsize(target), 8 * 1024 * 1024)  # cap held
+            self.assertLess(target.stat().st_size, 8 * 1024 * 1024)  # cap held
 
 
 @requires_lean
@@ -351,14 +357,14 @@ partial def loop (n : Nat) : IO Unit := do
         # A /proc scan rather than `pgrep`: the runtime image is minimal (no procps), and this
         # check matters most exactly there, not just on a dev host that happens to have it.
         leaked = []
-        for pid in os.listdir("/proc"):
-            if not pid.isdigit():
+        for proc_dir in Path("/proc").iterdir():
+            if not proc_dir.name.isdigit():
                 continue
             try:
-                with open(f"/proc/{pid}/cmdline", "rb") as f:
+                with (proc_dir / "cmdline").open("rb") as f:
                     cmdline = f.read().replace(b"\x00", b" ").decode(errors="replace")
             except OSError:
-                continue  # the process exited between listdir() and open()
+                continue  # the process exited between iterdir() and open()
             if marker in cmdline:
                 leaked.append(cmdline)
         self.assertEqual(leaked, [], f"leaked processes after kill: {leaked!r}")

@@ -294,7 +294,11 @@ class ProblemSubmitView(View):
         )
 
         status, result = grade_lean_submission(
-            problem, submission_code, student_code, keep_internal=request.user.is_staff
+            problem,
+            submission_code,
+            student_code,
+            keep_internal=request.user.is_staff,
+            user=request.user,
         )
         submission.status = status
         submission.result = result

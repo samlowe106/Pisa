@@ -205,7 +205,7 @@ def course_grade_distribution(course):
     total = sum(points_by_problem.values())
     earned = earned_points(course, points_by_problem, enrolled_ids).by_user
 
-    counts = {letter: 0 for letter in _GRADE_LETTERS}
+    counts = dict.fromkeys(_GRADE_LETTERS, 0)
     ungraded = 0
     for user_id in enrolled_ids:
         if not total:
@@ -217,7 +217,7 @@ def course_grade_distribution(course):
 
 
 def grade_distribution_chart(course):
-    """Stats-tab data: each offering (section) in ``course``'s family with its A–F counts, and
+    """Stats-tab data: each offering (section) in ``course``'s family with its A-F counts, and
     a per-letter list of colour-coded bars scaled to the largest count for rendering."""
     sections = []
     max_count = 1
@@ -304,8 +304,8 @@ def section_score_data(course):
 
 def compare_two_sections(course_a, course_b, counts_a, counts_b):
     """Full comparison of two sections: overall course grades, the letter-grade mix, and each
-    shared assignment (matched by slug), with Benjamini–Hochberg-corrected per-assignment
-    p-values. ``counts_*`` are A–F count vectors. Observational, not causal."""
+    shared assignment (matched by slug), with Benjamini-Hochberg-corrected per-assignment
+    p-values. ``counts_*`` are A-F count vectors. Observational, not causal."""
     data_a = section_score_data(course_a)
     data_b = section_score_data(course_b)
 

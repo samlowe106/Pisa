@@ -7,6 +7,8 @@ courses search, the active/previous split, and the live Lean editor. Idempotent:
 tops up anything missing rather than duplicating.
 """
 
+from typing import ClassVar
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
@@ -21,8 +23,8 @@ from apps.homework.models import (
 
 User = get_user_model()
 
-# Every seeded user shares this password.
-PASSWORD = "password"
+# Every seeded user shares this password: dev-only fixture data, never a real credential.
+PASSWORD = "password"  # noqa: S105
 
 DEFINITION_CONTENT = """/-- Our copy of the natural numbers called `MyNat`, with notation `ℕ`. -/
 inductive MyNat where
@@ -91,7 +93,8 @@ TRIVIAL_CODE = "example : True := trivial\n"
 class Command(BaseCommand):
     help = "Seed development users, courses, assignments, problems, and submissions."
 
-    def handle(self, *args, **options):
+    # args/options are part of Django's fixed handle() signature; this command takes neither.
+    def handle(self, *args, **options):  # noqa: ARG002
         # region Users (all share the password "password")
         teacher = self._user("teacher", is_staff=True)  # site admin
         instructor = self._user("instructor")  # course instructor, not an admin
@@ -198,7 +201,7 @@ class Command(BaseCommand):
 
     # -- helpers --------------------------------------------------------------------------
 
-    def _user(self, username, is_staff=False):
+    def _user(self, username, *, is_staff=False):
         user, created = User.objects.get_or_create(
             username=username,
             defaults={"email": f"{username}@example.com", "is_staff": is_staff},
@@ -317,7 +320,7 @@ class Command(BaseCommand):
         problem.visible_source_files.set([definition_file, addition_file])
         return problem
 
-    _RESULTS = {
+    _RESULTS: ClassVar[dict[str, str]] = {
         Submission.STATUS_PASSED: "Lean ran with no errors :)",
         Submission.STATUS_FAILED: "error: unsolved goals\n⊢ a + 0 = a",
         Submission.STATUS_ERROR: "Lean execution timed out.",

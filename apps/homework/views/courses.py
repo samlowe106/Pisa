@@ -154,36 +154,45 @@ class CourseDetailView(LoginRequiredMixin, DetailView):
             {"id": u.id, "name": display_name(u)} for u in course.tas.all()
         ]
 
-        # Per-student course grade is staff-only (students must not see each other's grades).
-        students_qs = course.students.order_by("last_name", "first_name", "username")
-        if is_course_staff:
-            published_assignment_ids = {a.id for a in assignments if a.is_published}
-            points_by_problem = {
-                problem.id: problem.points
-                for problem in problems
-                if problem.assignment_id in published_assignment_ids
-            }
-            total_possible = sum(points_by_problem.values())
-            earned_by_user = earned_totals(ep.passed_pairs, points_by_problem)
-            students = [
-                {
-                    "id": student.id,
-                    "name": display_name(student),
-                    "earned": earned_by_user.get(student.id, 0),
-                    "possible": total_possible,
-                    "percent": (
-                        earned_by_user.get(student.id, 0) / total_possible * 100
-                        if total_possible
-                        else None
-                    ),
+        # Roster names are visible to course staff and to the course's own students (classmates
+        # seeing each other is normal, matching the grade gate right below); the course page
+        # itself is browsable pre-enrollment (see the "Enroll in course" form), so an outsider
+        # who hasn't joined can see the course exists without seeing who else is enrolled.
+        is_enrolled = user.id in enrolled_ids
+        if is_course_staff or is_enrolled:
+            students_qs = course.students.order_by(
+                "last_name", "first_name", "username"
+            )
+            if is_course_staff:
+                published_assignment_ids = {a.id for a in assignments if a.is_published}
+                points_by_problem = {
+                    problem.id: problem.points
+                    for problem in problems
+                    if problem.assignment_id in published_assignment_ids
                 }
-                for student in students_qs
-            ]
+                total_possible = sum(points_by_problem.values())
+                earned_by_user = earned_totals(ep.passed_pairs, points_by_problem)
+                students = [
+                    {
+                        "id": student.id,
+                        "name": display_name(student),
+                        "earned": earned_by_user.get(student.id, 0),
+                        "possible": total_possible,
+                        "percent": (
+                            earned_by_user.get(student.id, 0) / total_possible * 100
+                            if total_possible
+                            else None
+                        ),
+                    }
+                    for student in students_qs
+                ]
+            else:
+                students = [
+                    {"id": student.id, "name": display_name(student)}
+                    for student in students_qs
+                ]
         else:
-            students = [
-                {"id": student.id, "name": display_name(student)}
-                for student in students_qs
-            ]
+            students = []
         context["students"] = students
 
         # region Statistics tab (staff only)
@@ -301,14 +310,16 @@ class CourseRenewView(LoginRequiredMixin, View):
             editable_courses(self.request.user), slug=self.kwargs["slug"]
         )
 
-    def get(self, request, slug):
+    # slug arrives via the URL pattern (Django's View.dispatch passes it positionally);
+    # _course() reads it back from self.kwargs instead.
+    def get(self, request, slug):  # noqa: ARG002
         return render(
             request,
             self.template_name,
             {"course": self._course(), "form": CourseRenewForm()},
         )
 
-    def post(self, request, slug):
+    def post(self, request, slug):  # noqa: ARG002
         course = self._course()
         form = CourseRenewForm(request.POST)
         if not form.is_valid():

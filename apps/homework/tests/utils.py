@@ -13,11 +13,13 @@ User = get_user_model()
 
 
 def _lean_available():
+    # "Lean isn't installed here" is a routine, expected state, not a bug to report.
     try:
         get_lean_executable()
-        return True
     except Exception:  # noqa: BLE001
         return False
+    else:
+        return True
 
 
 def _bwrap_can_sandbox():
@@ -33,10 +35,12 @@ def _bwrap_can_sandbox():
             [exe, "--unshare-all", "--ro-bind", "/", "/", "--proc", "/proc", "true"],
             capture_output=True,
             timeout=15,
+            check=False,
         )
-        return probe.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
+    else:
+        return probe.returncode == 0
 
 
 # Real-Lean tests run in CI's Docker image (Lean baked in) and skip elsewhere.
@@ -54,22 +58,23 @@ def _seccomp_denies_ptrace():
     bare host or dev container. ptrace(PTRACE_TRACEME) always succeeds on its own (it has no
     tracer to deny), so a plain permission check can't tell us this; only a seccomp ERRNO action
     makes the syscall itself fail, which is exactly what we're probing for."""
+    probe_code = (
+        "import ctypes, sys; "
+        "libc = ctypes.CDLL(None, use_errno=True); "
+        "rc = libc.ptrace(0, 0, 0, 0); "
+        "sys.exit(0 if rc == -1 and ctypes.get_errno() == 1 else 1)"
+    )
     try:
         probe = subprocess.run(
-            [
-                "python3",
-                "-c",
-                "import ctypes, sys; "
-                "libc = ctypes.CDLL(None, use_errno=True); "
-                "rc = libc.ptrace(0, 0, 0, 0); "
-                "sys.exit(0 if rc == -1 and ctypes.get_errno() == 1 else 1)",
-            ],
+            ["python3", "-c", probe_code],
             capture_output=True,
             timeout=10,
+            check=False,
         )
-        return probe.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
+    else:
+        return probe.returncode == 0
 
 
 # The ptrace-denial test only means something inside a container carrying the hardened

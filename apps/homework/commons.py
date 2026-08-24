@@ -21,7 +21,10 @@ from dataclasses import dataclass
 from html import unescape
 from html.parser import HTMLParser
 from io import BytesIO
-from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from PIL import Image
 
@@ -120,7 +123,7 @@ def best_thumb_width(
     r = orig_h / orig_w
 
     def clamp(value: float) -> int:
-        return max(1, min(orig_w, int(round(value))))
+        return max(1, min(orig_w, round(value)))
 
     if target_h is None:
         return clamp(target_w)
@@ -153,7 +156,7 @@ class _ArtistParser(HTMLParser):
     # Elements that delimit text segments. Multilingual author templates repeat the same name
     # in per-language spans with no whitespace between them ("Unknown authorUnknown author"),
     # so parse_artist needs the element boundaries to dedupe the repeats.
-    _SEGMENT_TAGS = {"a", "div", "p", "span"}
+    _SEGMENT_TAGS: ClassVar[set[str]] = {"a", "div", "p", "span"}
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -267,10 +270,15 @@ class ImageInfo:
 
 
 def _http_get(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(
-        request, timeout=TIMEOUT
-    ) as response:  # noqa: S310 - https only
+    if not url.startswith("https://"):
+        # Enforced, not just assumed: `url` here can come from a Commons API response
+        # (fetch_image_info / pick_download_url), not only our own hardcoded API_URL.
+        msg = f"refusing to fetch a non-https URL: {url}"
+        raise ValueError(msg)
+    request = urllib.request.Request(  # noqa: S310 - scheme checked above
+        url, headers={"User-Agent": USER_AGENT}
+    )
+    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
         return response.read()
 
 

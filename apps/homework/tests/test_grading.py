@@ -150,7 +150,7 @@ class AssembleSubmissionSourceTests(TestCase):
             content="",
             order=0,
         )
-        full, student, error = assemble_lean_submission_source(
+        _full, student, error = assemble_lean_submission_source(
             problem, {"code": "theorem solo : True := trivial"}
         )
         self.assertIsNone(error)
@@ -197,10 +197,15 @@ class GradePreScanTests(TestCase):
     def test_disallowed_construct_in_student_code_is_rejected_before_lean(self):
         problem = self._problem()
         code = "theorem t : False := sorry"
-        status, message = grade_lean_submission(problem, code, code)
+        with self.assertLogs("apps.homework.lean_runner", level="WARNING") as logs:
+            status, message = grade_lean_submission(
+                problem, code, code, user=self.m["student"]
+            )
         self.assertEqual(status, Submission.STATUS_FAILED)
         self.assertIn(SCAN_REJECTION, message)
         self.assertIn("sorry", message)
+        self.assertIn(str(self.m["student"]), logs.output[0])
+        self.assertIn(str(problem.pk), logs.output[0])
 
     def test_allowed_construct_passes_the_scan(self):
         # With `sorry` allow-listed the scan must not reject; whether Lean is installed only
@@ -257,9 +262,13 @@ class GradeWithRealLeanTests(TestCase):
         # allow-list `sorry` so the text scan passes; the axiom audit must still fail it.
         problem = self._problem(axiom_target="t", allowed_constructs=["sorry"])
         code = "theorem t : True := sorry"
-        status, message = grade_lean_submission(problem, code, code)
+        with self.assertLogs("apps.homework.lean_runner", level="WARNING") as logs:
+            status, message = grade_lean_submission(
+                problem, code, code, user=self.m["student"]
+            )
         self.assertEqual(status, Submission.STATUS_FAILED)
         self.assertIn(SORRY_REJECTION, message)
+        self.assertIn(str(self.m["student"]), logs.output[0])
 
     def test_axiom_target_clean_proof_passes(self):
         problem = self._problem(axiom_target="t")

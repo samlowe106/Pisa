@@ -29,10 +29,10 @@ repos:
         args: [--markdown-linebreak-ext, "md,markdown"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.18
+    rev: v0.16.4
     hooks:
       - id: ruff
-        name: ruff (lint + autofix)
+        name: ruff
         args: [--fix]
 
   - repo: https://github.com/psf/black
@@ -42,7 +42,7 @@ repos:
         args: [--safe]
 
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.14.0
+    rev: v2.15.1
     hooks:
       # Lints the Dockerfile (config in .hadolint.yaml); runs via Docker, so Docker must be
       # available.

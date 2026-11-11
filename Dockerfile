@@ -3,7 +3,7 @@
 # --- base: what every stage shares, the interpreter and the *runtime* system deps only.
 # Build tooling (compilers, curl, git) lives in the build stage below and never reaches the
 # runtime image.
-FROM python:3.14-slim AS base
+FROM python:3.15-slim AS base
 
 # uv installs the locked deps into this venv. It lives outside /app so the docker-compose
 # `.:/app` volume mount can't shadow it; only-system stops uv from downloading a second

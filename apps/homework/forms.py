@@ -1,4 +1,4 @@
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -12,6 +12,9 @@ from .models import (
     ProblemBlock,
 )
 from .thumbnails import available_thumbnail_presets
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
 
 User = get_user_model()
 
@@ -247,6 +250,13 @@ class ProblemForm(forms.ModelForm):
             "points": forms.NumberInput(attrs={"type": "number", "min": "1"}),
             "visible_source_files": forms.CheckboxSelectMultiple(),
         }
+
+    def limit_visible_source_files(self, queryset: QuerySet[LeanSourceFile]) -> None:
+        """Offer only these files (the assignment's imports) as visible-file choices."""
+        field = cast(
+            "forms.ModelMultipleChoiceField", self.fields["visible_source_files"]
+        )
+        field.queryset = queryset
 
 
 class ProblemBlockForm(forms.ModelForm):

@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
 
@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
 
@@ -98,7 +98,7 @@ jobs:
           cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max' || '' }}
 
       # pip-audit (above) covers Python packages; this covers the OS layer: the Debian
-      # packages in python:3.14-slim plus everything the Dockerfile apt-installs.
+      # packages in the debian:trixie-slim base plus everything the Dockerfile apt-installs.
       # `ignore-unfixed` keeps the gate actionable: an advisory Debian hasn't fixed yet can't
       # be remediated by rebuilding, so it doesn't fail the job, but the moment a fix ships,
       # the job fails until the base image is re-pulled and rebuilt. All findings (fixed or

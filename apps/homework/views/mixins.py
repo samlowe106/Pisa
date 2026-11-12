@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import UserPassesTestMixin
 
@@ -57,7 +57,7 @@ class FormsetMixin:
     ``form_valid`` before calling ``super().form_valid(form)``.
     """
 
-    formset_class: type[BaseInlineFormSet] | None = None
+    formset_class: type[BaseInlineFormSet[Any, Any, Any]] | None = None
     formset_context_name = "formset"
 
     # Not return-typed: FormsetMixin is a bare mixin (no base class), always combined with a

@@ -1,17 +1,21 @@
 # syntax=docker/dockerfile:1
 
-# --- base: what every stage shares, the interpreter and the *runtime* system deps only.
+# --- base: what every stage shares, the *runtime* system deps only.
 # Build tooling (compilers, curl, git) lives in the build stage below and never reaches the
-# runtime image.
-FROM python:3.14-slim AS base
+# runtime image. No python base image: the interpreter is installed by uv in the build stage
+# from .python-version, so that file is the only place the Python version is set.
+FROM debian:trixie-slim AS base
 
 # uv installs the locked deps into this venv. It lives outside /app so the docker-compose
-# `.:/app` volume mount can't shadow it; only-system stops uv from downloading a second
-# Python (it reuses the image's interpreter).
-ENV PYTHONDONTWRITEBYTECODE=1 \
+# `.:/app` volume mount can't shadow it. The uv-managed interpreter lives in /opt/python,
+# also outside /app, and is copied into the runtime stage at the same path so the venv's
+# interpreter symlinks stay valid.
+ENV LANG=C.UTF-8 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
-    UV_PYTHON_PREFERENCE=only-system \
+    UV_PYTHON_INSTALL_DIR=/opt/python \
+    UV_PYTHON_PREFERENCE=only-managed \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     ELAN_HOME=/opt/elan \
@@ -77,9 +81,14 @@ RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init
 # uv (Python package manager), pinned by copying the binary from its official image,
 # for reproducible builds, unlike `curl | sh` of whatever is latest. Placed *after* the Lean
 # layer so bumping the uv version doesn't invalidate the expensive toolchain download.
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
+
+# With no arguments, `uv python install` installs the version named in .python-version.
+# Its own layer, so a Python bump re-runs only this and the dependency install below.
+COPY .python-version ./
+RUN uv python install
 
 # Install only the locked *dependencies* before copying source, so this layer caches
 # independently of application code. `--no-install-project` skips building the `pisa` app
@@ -98,6 +107,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # --- runtime (default target): lean production image, no compilers, no build tooling ---
 FROM base AS runtime
 
+# Root-owned on purpose: the app user has no reason to modify the interpreter.
+COPY --from=build /opt/python /opt/python
 COPY --from=build --chown=app:app /opt/venv /opt/venv
 COPY --from=build --chown=app:app /opt/elan /opt/elan
 

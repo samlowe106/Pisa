@@ -1,5 +1,5 @@
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -148,10 +148,8 @@ class ProblemCreateView(LoginRequiredMixin, FormsetMixin, CreateView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_form(self, form_class=None) -> ProblemForm:
-        form = super().get_form(form_class)
-        form.fields["visible_source_files"].queryset = (
-            self.assignment.source_files.all()
-        )
+        form = cast("ProblemForm", super().get_form(form_class))
+        form.limit_visible_source_files(self.assignment.source_files.all())
         return form
 
     def get_context_data(self, **kwargs) -> dict:
@@ -183,10 +181,8 @@ class ProblemUpdateView(
         return editable_problems(self.request.user)
 
     def get_form(self, form_class=None) -> ProblemForm:
-        form = super().get_form(form_class)
-        form.fields["visible_source_files"].queryset = (
-            self.object.assignment.source_files.all()
-        )
+        form = cast("ProblemForm", super().get_form(form_class))
+        form.limit_visible_source_files(self.object.assignment.source_files.all())
         return form
 
     def get_context_data(self, **kwargs) -> dict:

@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # setup-uv no longer publishes a moving major tag, so pin a full version.
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
         with:
           enable-cache: true
 
